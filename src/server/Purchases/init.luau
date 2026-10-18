@@ -31,34 +31,16 @@ local Purchases = {}
 local CREDITABLE: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true }
 local SKIP_MACHINE: { [string]: string } = { NeonSkip = "Neon", MegaSkip = "Mega" }
 
--- Last product the client said it is about to buy, with its target (InstantGrow tile key).
--- Only used to pick a target; the receipt decides what is granted.
-local intents: { [Player]: { key: string, arg: string? } } = {}
-
 -- Applies a product's effect to the profile. Returns a message, or nil if there was nothing to
--- apply it to (credits only when `bank`). Never yields.
+-- apply it to (credits only when `bank`). Never yields. InstantGrow's `arg` is a plant uid; a
+-- skip always targets its own machine, so its credit (keyed NeonSkip / MegaSkip) stays bound to
+-- that machine.
 local function apply(p: Data.Profile, key: string, arg: string?, bank: boolean): string?
 	local now = os.time()
 	if key == "InstantGrow" then
-		local mult = Economy.growthMultiplier(p, now)
-		local target: string? = nil
-		local rec = arg and p.planted[arg]
-		if rec and not Economy.isGrown(rec, now, mult) then
-			target = arg
-		else
-			local longest = -1
-			for k, r in p.planted do
-				if not Economy.isGrown(r, now, mult) then
-					local left = (r.plantedAt or now) + Economy.effectiveGrowSeconds(r, mult) - now
-					if left > longest then
-						longest, target = left, k
-					end
-				end
-			end
-		end
-		if target then
-			local r = p.planted[target]
-			r.matured = true
+		local tile = Core.instantGrow(p, arg, now)
+		if tile then
+			local r = p.planted[tile]
 			local def = Plants.ById[r.species]
 			return `Instant Grow: {if def then def.Name else r.species} is fully grown!`
 		end
@@ -95,13 +77,21 @@ local function grant(player: Player, key: string, arg: string?)
 	end
 end
 
-local function run(player: Player, session: Data.Session, purchaseId: string, key: string, arg: string?): string
+-- The target comes from the saved profile, and Core.process stores it in the pending grant
+-- before the save, so a crash-recovered grant hits the same plant.
+local function run(player: Player, session: Data.Session, purchaseId: string, key: string): string
+	local arg = session.data.purchaseIntent[key]
 	local result: string = Core.process(session.data.receiptLedger, purchaseId, key, arg, function()
 		return Data.save(session)
 	end, function(k, a)
 		grant(player, k, a)
 	end)
 	if result == "Granted" then
+		if arg and session.data.purchaseIntent[key] == arg then
+			Data.update(player, function(p)
+				p.purchaseIntent[key] = nil
+			end)
+		end
 		task.spawn(Data.save, session)
 	else
 		warn(`[Purchases] {key} {purchaseId} for {player.Name}: ledger save failed; NotProcessedYet, nothing granted`)
@@ -116,9 +106,7 @@ local function processReceipt(info: { [string]: any }): Enum.ProductPurchaseDeci
 	if not product or not player or not session then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local intent = intents[player]
-	local arg = if intent and intent.key == product.Key then intent.arg else nil
-	local result = run(player, session, tostring(info.PurchaseId), product.Key, arg)
+	local result = run(player, session, tostring(info.PurchaseId), product.Key)
 	return if result == "Granted" then Enum.ProductPurchaseDecision.PurchaseGranted else Enum.ProductPurchaseDecision.NotProcessedYet
 end
 
@@ -134,9 +122,7 @@ function Purchases.debugGrant(player: Player, key: string, purchaseId: string?):
 	if not session then
 		return "player has no loaded profile"
 	end
-	local intent = intents[player]
-	local arg = if intent and intent.key == key then intent.arg else nil
-	return run(player, session, purchaseId or ("debug-" .. HttpService:GenerateGUID(false)), key, arg)
+	return run(player, session, purchaseId or ("debug-" .. HttpService:GenerateGUID(false)), key)
 end
 
 local function useCredit(player: Player, key: string, arg: string?)
@@ -144,9 +130,14 @@ local function useCredit(player: Player, key: string, arg: string?)
 	if not session or not CREDITABLE[key] or (session.data.credits[key] or 0) < 1 then
 		return
 	end
+	local target = arg
+	if key == "InstantGrow" then
+		local rec = arg and session.data.planted[arg]
+		target = rec and rec.uid
+	end
 	local msg: string? = nil
 	Data.update(player, function(p)
-		msg = apply(p, key, arg, false)
+		msg = apply(p, key, target, false)
 		if msg then
 			p.credits[key] -= 1
 			if p.credits[key] <= 0 then
@@ -160,15 +151,20 @@ end
 
 function Purchases.start()
 	MarketplaceService.ProcessReceipt = processReceipt
+	-- InstantGrow: `arg` is the tile key of one of the player's growing plants; its uid is saved
+	-- on the profile. Anything else clears the intent, so a stale target is never reused.
 	Net.on("PurchaseIntent", { "string", "string?" }, function(player, key: string, arg: string?)
-		if Products.ByKey[key] then
-			intents[player] = { key = key, arg = arg }
+		if key ~= "InstantGrow" then
+			return
 		end
+		Data.update(player, function(p)
+			local rec = arg and p.planted[arg]
+			local growing = rec ~= nil and not Economy.isGrown(rec, os.time(), Economy.growthMultiplier(p, os.time()))
+			local uid: string? = if growing and rec then rec.uid else nil
+			p.purchaseIntent.InstantGrow = uid :: any
+		end)
 	end)
 	Net.on("UseCredit", { "string", "string?" }, useCredit)
-	Players.PlayerRemoving:Connect(function(player)
-		intents[player] = nil
-	end)
 	Data.onLoaded(function(player, session)
 		local n = Core.recover(session.data.receiptLedger, function(k, a)
 			grant(player, k, a)

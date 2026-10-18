@@ -14,6 +14,7 @@ export type PlantedTile = {
 	variant: string, -- "Normal" | "Neon" | "Mega"
 	plantedAt: number, -- os.time() on server
 	matured: boolean?, -- placed back from inventory already grown
+	uid: string?, -- unique per planting (from nextItemId); purchase intents target this
 }
 
 export type PlantItem = {
@@ -67,6 +68,9 @@ export type Profile = {
 		questsDone: { [string]: boolean },
 	},
 	credits: { [string]: number }, -- Robux products granted with nothing to apply to yet
+	-- Saved target of the product the player is about to buy (InstantGrow -> plant uid). The
+	-- receipt reads it from here, so the grant can only ever finish that plant.
+	purchaseIntent: { [string]: string },
 	growthBoostEndsAt: number,
 	lastSeen: number, -- os.time() of the last successful save; drives offline earnings
 	starterGranted: boolean,
@@ -113,6 +117,7 @@ function Schema.default(): Profile
 		collection = {},
 		event = { currency = {}, inventory = {}, quests = {}, questsDone = {} },
 		credits = {},
+		purchaseIntent = {},
 		growthBoostEndsAt = 0,
 		lastSeen = 0,
 		starterGranted = false,
@@ -175,6 +180,21 @@ local migrations: { [number]: (any) -> any } = {
 		-- v4 replaces the unused fusion stub with the real state machine; reconcile refills it.
 		d.fusion = nil
 		d.version = 4
+		return d
+	end,
+	[4] = function(d)
+		-- v5 gives every planted plant a uid so purchase intents can target it.
+		if type(d.planted) == "table" then
+			local nextId = if type(d.nextItemId) == "number" then d.nextItemId else 1
+			for _, rec in d.planted do
+				if type(rec) == "table" and rec.uid == nil then
+					rec.uid = tostring(nextId)
+					nextId += 1
+				end
+			end
+			d.nextItemId = nextId
+		end
+		d.version = 5
 		return d
 	end,
 }

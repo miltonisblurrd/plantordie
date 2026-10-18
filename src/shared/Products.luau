@@ -1,4 +1,8 @@
 --!strict
+-- Product ids (owner step): create each Developer Product on this experience in the Creator
+-- Dashboard and paste its numeric id here. Never grant from the client; grants happen only in
+-- the server's ProcessReceipt. Id 0 keeps the product's prompt disabled.
+--
 -- Developer Products (spec §14). Id 0 = not created yet: the client never prompts it and the
 -- server's receipt handler cannot match it, but the full receipt path is live.
 -- Benefit is the exact text shown in the confirm dialog before Roblox's own price prompt.
@@ -12,7 +16,7 @@ export type Product = {
 }
 
 local list: { Product } = {
-	{ Key = "InstantGrow", Id = 0, PriceRobux = 25, Benefit = "Instantly finish growing the plant you picked. If it has already grown, your longest-growing plant finishes instead." },
+	{ Key = "InstantGrow", Id = 0, PriceRobux = 25, Benefit = "Instantly finish growing the plant you picked. If that plant is gone or grown by the time the purchase completes, you keep an Instant Grow credit to use on any growing plant." },
 	{ Key = "NeonSkip", Id = 0, PriceRobux = 49, Benefit = "Finish your current Neon Maker fusion now. With no fusion running, you keep a skip to use later." },
 	{ Key = "MegaSkip", Id = 0, PriceRobux = 99, Benefit = "Finish your current Mega Maker fusion now. With no fusion running, you keep a skip to use later." },
 	{ Key = "GrowthBoost", Id = 0, PriceRobux = 79, Benefit = "2x growth speed for every plant for 30 minutes (stacks time if already active).", Seconds = 30 * 60 },

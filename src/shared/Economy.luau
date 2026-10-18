@@ -15,6 +15,7 @@ export type PlantRecord = {
 	variant: string,
 	plantedAt: number?,
 	matured: boolean?, -- true when moved back from inventory already grown
+	uid: string?,
 }
 
 export type PlantIdentity = { species: string, rarity: string, size: string, variant: string }

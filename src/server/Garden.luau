@@ -307,7 +307,9 @@ local function plantSeed(player: Player, key: string, species: string)
 			size = size,
 			variant = "Normal",
 			plantedAt = os.time(),
+			uid = tostring(p.nextItemId),
 		}
+		p.nextItemId += 1
 		p.collection[species .. "|Normal"] = true
 		p.stats.plantsPlanted += 1
 	end)
@@ -340,6 +342,7 @@ local function placePlant(player: Player, key: string, itemId: string)
 			variant = item.variant,
 			plantedAt = os.time(),
 			matured = true,
+			uid = itemId,
 		}
 	end)
 	render(player, key)

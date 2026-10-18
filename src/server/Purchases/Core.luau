@@ -7,6 +7,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Economy = require(ReplicatedStorage.Shared.Economy)
 
 export type Pending = { key: string, arg: string? }
 export type Ledger = { order: { string }, seen: { [string]: boolean }, pending: { [string]: Pending } }
@@ -70,6 +71,31 @@ function Core.process(
 	trim(ledger)
 	inFlight[purchaseId] = nil
 	return "Granted"
+end
+
+export type GrowProfile = {
+	planted: { [string]: Economy.PlantRecord },
+	water: { channel: boolean, sprinkler: boolean, pond: boolean },
+	growthBoostEndsAt: number,
+}
+
+-- Finishes the still-growing plant with this uid and returns its tile key. Returns nil if that
+-- plant is gone or already grown; it never picks a different plant.
+function Core.instantGrow(p: GrowProfile, uid: string?, now: number): string?
+	if not uid then
+		return nil
+	end
+	local mult = Economy.growthMultiplier(p, now)
+	for key, rec in p.planted do
+		if rec.uid == uid then
+			if Economy.isGrown(rec, now, mult) then
+				return nil
+			end
+			rec.matured = true
+			return key
+		end
+	end
+	return nil
 end
 
 -- Applies grants left pending by a crash between save and grant. Returns how many.
