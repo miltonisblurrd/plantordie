@@ -1,11 +1,13 @@
 --!strict
--- Collection index: every species by biome (event species last), discovered or "???", with
--- Normal / Neon / Mega badges from profile.collection ("species|variant").
+-- Collection index: every species grouped by biome (event species last). Discovered species show
+-- their head colour, name and best variant owned; locked ones show a dark silhouette and "???".
+-- Data is the server's derived discovery set (Shared/Discovery), not client guesses.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
+local Discovery = require(ReplicatedStorage.Shared.Discovery)
 local Events = require(ReplicatedStorage.Shared.Events)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Rarities = require(ReplicatedStorage.Shared.Rarities)
@@ -14,10 +16,10 @@ local State = require(script.Parent.State)
 
 local Collection = {}
 
-local BADGES = {
-	{ Id = "Normal", Short = "N", Color = Color3.fromRGB(200, 200, 200) },
-	{ Id = "Neon", Short = "NEON", Color = Color3.fromRGB(80, 255, 220) },
-	{ Id = "Mega", Short = "MEGA", Color = Color3.fromRGB(255, 90, 220) },
+local BADGES: { [string]: { Short: string, Color: Color3 } } = {
+	Normal = { Short = "Normal", Color = Color3.fromRGB(200, 200, 200) },
+	Neon = { Short = "Neon", Color = Color3.fromRGB(80, 255, 220) },
+	Mega = { Short = "Mega", Color = Color3.fromRGB(255, 90, 220) },
 }
 
 local list: ScrollingFrame? = nil
@@ -56,31 +58,49 @@ local function rebuild()
 		for _, def in sec.plants do
 			order += 1
 			total += 1
-			local known = snap.collection[def.Id .. "|Normal"] or snap.collection[def.Id .. "|Neon"] or snap.collection[def.Id .. "|Mega"]
+			local best = Discovery.best(snap.collection, def.Id)
+			local known = best ~= nil
 			if known then
 				found += 1
 			end
 			local rarity = Rarities.ById[def.Rarity]
+			local rarityColor = if rarity then rarity.Color else Color3.new(1, 1, 1)
 			local row = Instance.new("Frame")
 			row.Name = "Row"
 			row.LayoutOrder = order
 			row.BackgroundTransparency = 1
-			row.Size = UDim2.new(1, -8, 0, 24)
+			row.Size = UDim2.new(1, -8, 0, 30)
 			row.Parent = l
-			local name = Ui.label("Name", if known then `{def.Name} · {def.Rarity}` else `??? · {def.Rarity}`, false, row)
-			name.Size = UDim2.new(1, -150, 1, 0)
+			local icon = Instance.new("Frame")
+			icon.Name = "Icon"
+			icon.Size = UDim2.fromOffset(26, 26)
+			icon.Position = UDim2.fromOffset(0, 2)
+			icon.BorderSizePixel = 0
+			icon.BackgroundColor3 = if known then def.Model.HeadColor else Color3.fromRGB(18, 18, 20)
+			icon.Parent = row
+			Ui.corner(icon, 13)
+			local ring = Instance.new("UIStroke")
+			ring.Thickness = 2
+			ring.Color = rarityColor
+			ring.Transparency = if known then 0 else 0.6
+			ring.Parent = icon
+			local name = Ui.label("Name", if known then def.Name else "???", false, row)
+			name.Size = UDim2.new(1, -230, 1, 0)
+			name.Position = UDim2.fromOffset(34, 0)
 			name.TextXAlignment = Enum.TextXAlignment.Left
-			name.TextColor3 = if known and rarity then rarity.Color else Color3.fromRGB(130, 130, 136)
-			for i, b in BADGES do
-				local has = snap.collection[def.Id .. "|" .. b.Id] == true
-				local badge = Ui.label("Badge" .. b.Id, b.Short, true, row)
-				badge.Size = UDim2.fromOffset(46, 20)
-				badge.Position = UDim2.new(1, -150 + (i - 1) * 50, 0, 2)
-				badge.BackgroundTransparency = if has then 0.2 else 0.85
-				badge.BackgroundColor3 = b.Color
-				badge.TextColor3 = if has then Color3.new(0, 0, 0) else Color3.fromRGB(120, 120, 126)
-				Ui.corner(badge, 6)
-			end
+			name.TextColor3 = if known then Color3.new(1, 1, 1) else Color3.fromRGB(130, 130, 136)
+			local rar = Ui.label("Rarity", def.Rarity, false, row)
+			rar.Size = UDim2.fromOffset(84, 30)
+			rar.Position = UDim2.new(1, -196, 0, 0)
+			rar.TextColor3 = rarityColor
+			local badgeInfo = if best then BADGES[best] else nil
+			local badge = Ui.label("Best", if badgeInfo then `Best: {badgeInfo.Short}` else "Locked", true, row)
+			badge.Size = UDim2.fromOffset(104, 24)
+			badge.Position = UDim2.new(1, -106, 0, 3)
+			badge.BackgroundTransparency = if badgeInfo then 0.2 else 0.85
+			badge.BackgroundColor3 = if badgeInfo then badgeInfo.Color else Color3.fromRGB(60, 60, 66)
+			badge.TextColor3 = if badgeInfo then Color3.new(0, 0, 0) else Color3.fromRGB(150, 150, 156)
+			Ui.corner(badge, 6)
 		end
 	end
 	if summary then
@@ -88,7 +108,7 @@ local function rebuild()
 	end
 end
 
-function Collection.start(bar: Frame)
+function Collection.start(bar: GuiObject)
 	local gui = Ui.screen("Collection", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
 	local p = Ui.panel("Panel", UDim2.fromOffset(420, 460), gui)
 	p.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -139,11 +159,12 @@ function Collection.start(bar: Frame)
 		if not p.Visible then
 			return
 		end
-		local n = 0
-		for _ in s.collection do
-			n += 1
+		local keys = {}
+		for k in s.collection do
+			table.insert(keys, k)
 		end
-		local sig = tostring(n)
+		table.sort(keys)
+		local sig = table.concat(keys, ",")
 		if sig ~= lastSig then
 			lastSig = sig
 			rebuild()
