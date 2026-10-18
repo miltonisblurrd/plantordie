@@ -10,7 +10,7 @@ Rojo project `PlantOrDie` (`default.project.json`, Rojo 7.7.1 via `rokit.toml`).
 | ServerScriptService.Server | `src/server` | Authority over every number |
 | StarterPlayerScripts.Client | `src/client` | Renders the state it receives |
 
-Phases 1 (Foundation) and 2 (Planting) of cut v1 are built on branch `cursor/p1-foundation-cc3f`. The v1 prototype (roll/gems/quests) has been deleted.
+Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on branch `cursor/p1-foundation-cc3f`. The v1 prototype (roll/gems/quests) has been deleted.
 
 ## Shared (`src/shared`)
 
@@ -19,40 +19,51 @@ Phases 1 (Foundation) and 2 (Planting) of cut v1 are built on branch `cursor/p1-
 - `Sizes`: Small ×1 to Giant ×25, with roll weights and visual scale (capped at 1.8)
 - `Lanes`: lane prices (1-3 free, 4-7 paid)
 - `Houses`: 5 tiers with cost, max HP, required biome, plant slots, and model params
-- `Biomes`: the 15 biomes in order, with unlock cost and palette (ground, 2 accents, prop)
+- `Biomes`: the 15 biomes in order, with unlock cost, palette, `Released`, `DigStyle` and `ToughTier`
 - `Products`: Developer Products (placeholder IDs are 0)
 - `Remotes`: every remote, with its kind, rate, and burst
 - `Format`: money and clock strings
-- `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` (Normal ×1, Neon ×3, Mega ×10). Green Meadows has 4 species; Mushroom Forest has 1 so far.
+- `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` (Normal ×1, Neon ×3, Mega ×10). 60 species (4 per biome) from a `roster` table. Pacing formulas are in `studio/tasks/pod-v2/pacing.md`.
 - `Economy`: **the only income and growth maths.** Provides `incomeOf` (base × rarity × size × variant × bonuses), `growthMultiplier`, `growth` (stages 1-4), `rollSize`, and `offlineEarnings`.
-- Stubs that later phases fill: `DropTables`, `Zombies`, `Guardians`, `Fusion`, `Upgrades`, `Events` (Halloween window and `active()`)
+- `DropTables`: rarity weights per biome, exclusive to that biome. `weighted(biome, luck)` and `roll(biome, luck, r01)`. Luck is clamped by `Config.Dig.MaxLuck`.
+- `Upgrades`: 5 shovels (Rusty, Iron, Golden, Crystal, Void) with price, DigSeconds, LuckBonus and ToughTier
+- `Guardians`: 15 guardians (`List`, `ByBiome`) with shape, speeds, detect range, leash, catch range, path recompute interval and prediction
+- Stubs that later phases fill: `Zombies`, `Fusion`, `Events` (Halloween window and `active()`)
 
 ## Server (`src/server`)
 
 - `Boot.server`: start order. Net, then the world (Hub, Biomes, Plots), then Sync, DayNight, and Data.
 - `Net`: creates the remotes from `Remotes`. `on` and `onInvoke` wrap every handler with three checks: the player's profile is loaded, the player is within their rate limit for that remote, and the argument types are valid. Also provides `fire`, `fireAll`, and `notify`.
 - `Data/init`: player sessions. Loads use `UpdateAsync` with a session lock (`{jobId, time}`, stolen if older than 30 minutes or from the same job), 3 retries with backoff, and a kick on failure. A save only happens if the load succeeded. Autosave runs every 60s, a save runs on leave, and `BindToClose` flushes everything. Also: the receipt ledger (`recordReceipt`), and the `onLoaded`, `onReleasing`, `onChanged`, and `update` hooks.
-- `Data/Schema`: the `Profile` type, defaults, migrations (v2 stacks seeds by species and adds `lastSeen` and `starterGranted`), and reconcile
+- `Data/Schema`: the `Profile` type, defaults, migrations (v2 stacks seeds by species and adds `lastSeen` and `starterGranted`; v3 adds `expedition`, the saved unbanked bag), and reconcile
 - `Data/Store`: the DataStore backend, or an in-memory fallback in Studio without API access (warns loudly). Setting the `DebugFailDataStore` attribute in Studio injects failures.
 - `Plots`: assigns one plot per player for the session. Provides `ownerOf(tile|plot)`, `isOwner(player, plot)`, `plotOf`, `plotAt`, `refresh` (lanes and house), the spawn location, and `onAssigned` / `onReleased` hooks.
-- `Biomes`: builds the gates and the P3 biome anchors. Provides `isUnlocked`, `highestUnlocked`, and `anchor`.
+- `Biomes`: builds the gates, the 15 biomes and the trails. Provides `isUnlocked`, `highestUnlocked`, `info`, `regionOf`, `inRegion`, `inSafeZone`, `canEnter`, and `HubSpawn`. Its 0.5s enforcement loop sends anyone in a biome they can't enter back to the hub.
+- `Expedition`: the unbanked bag. Provides `add`, `lose` (clears only the bag), and `bank`. A loop banks the bag at the player's own plot or by the fountain.
+- `Dig`: the `Dig` remote. Checks the spot, distance, region access, equipped shovel, tough tier and cooldown, then rolls the drop, respawns the spot later, and fires `DigResult`.
+- `Tools`: gives the Shovel tool on spawn
+- `GuardianAI`: one Heartbeat loop for every guardian (Patrol, Chase, Cooldown). Throttled off-thread PathfindingService with a direct-move fallback, a stuck reset, and loss on leash, safe zone or leaving the region. A catch clears the bag and sends the player home. Guardians in empty biomes sleep.
 - `DayNight`: the synced cycle. Broadcasts `(phase, endsAt, duration, night)` and moves `Lighting.ClockTime`. Provides an `onPhaseChanged` hook for P4.
 - `Garden`: planting, placing and removing plants (`PlantSeed`, `PlacePlant`, `RemovePlant`), plant models rebuilt from `profile.planted`, the 1s income and stage tick, offline earnings, and the starter pack. `incomeOf` feeds Sync.
-- `Shop`: `BuyLane` (in order) and `BuyHouse` (biome-gated). Both rebuild the plot visuals.
+- `Shop`: `BuyLane` (in order), `BuyHouse` (biome-gated), `UnlockBiome` (released, in order, saved), and `BuyShovel` (next tier)
 - `Sync`: sends the HUD snapshot (`StateSync`) and tracks each player's area. `setIncomeProvider` is the hook for P2 Garden.
 - `World/Parts`: the part factory, plus tree, rock, and surface-text helpers
-- `World/Layout`: placement maths. Plots sit on a ring at 45° steps. Gates sit 2 per sector between plot paths. Biome anchors are at radius 1400.
-- `World/Builders/Hub`, `Gate`, `Plot`, `House`, `PlantModel`: models built from parts. `PlantModel` builds per stage and variant: Neon gets a light and particles, Mega gets the `MegaPlant` tag and sparkles. Lane signs carry a `BuyLanePrompt`. `House.build(tier, …)` swaps the house model when the tier changes.
+- `World/Layout`: placement maths. Plots sit on a ring at 45° steps. Gates sit 2 per sector between plot paths. Biomes are 240×240 squares on ring radius 760, two per plot gap. Each trail has 5 points (`biomePath`).
+- `World/BiomeKit`: the shared biome skeleton (ground, walls, entrance, safe zone, patrol, danger zones, dig spots) and prop helpers. `World/Builders/Biomes/<Id>`: one builder per biome. `World/Builders/GuardianRig`: guardian models.
+- `World/Builders/Hub`, `Gate` (with `UnlockBiomePrompt`), `Plot`, `House`, `PlantModel`: models built from parts. `PlantModel` builds per stage and variant: Neon gets a light and particles, Mega gets the `MegaPlant` tag and sparkles. Lane signs carry a `BuyLanePrompt`. `House.build(tier, …)` swaps the house model when the tier changes.
 
 ## Client (`src/client`)
 
 - `Boot.client`: starts the controllers
 - `State`: the only inbound data path (`StateSync`, `DayNight`)
 - `Ui`: brand primitives and a `ScreenGui` with safe-area insets and a `UIScale`
-- `Hud`: money, income/sec, area, the day/night countdown, house HP, and the event slot
+- `Hud`: money, income/sec, area (the current biome, safe zone or trail), the bag, the day/night countdown, house HP, and the event slot
 - `Notifications`: toasts from the `Notify` remote
 - `Camera`: the elevated lane view on your own plot (toggle with the C key or the button)
-- `Gates`: per-player gate signs and local barrier collision
+- `Gates`: per-player gate signs, local barrier collision, and the unlock prompt with an order and price confirm
+- `Shovel`: tool hook, nearest spot, swing tween, `Dig` request, dig VFX, and the shovel shop panel
+- `Danger`: the guardian warning banner and sound
+- `Atmosphere`: a colour tint per biome
 - `Placement`: tile raycast with a green/red preview. Mouse: click to plant. Touch: tap to preview, tap again to plant. With nothing selected, a click opens Inspect.
 - `Inspect`: the plant popup (species, rarity colour, size, variant, timer, income, and a confirmed dig-up)
 - `Inventory`: the seeds and plants panel. Picking an entry selects it in Placement.
@@ -62,8 +73,8 @@ Phases 1 (Foundation) and 2 (Planting) of cut v1 are built on branch `cursor/p1-
 
 ## Remotes
 
-Server to client: `StateSync`, `DayNight`, `Notify`.
-Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`. These are declared but not handled yet: `UnlockBiome`, `Dig` (P3), `FusionStart`, `FusionClaim` (P5).
+Server to client: `StateSync`, `DayNight`, `Notify`, `DigResult`, `Danger`.
+Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`. These are declared but not handled yet: `FusionStart`, `FusionClaim` (P5).
 
 ## Rules for later phases
 
