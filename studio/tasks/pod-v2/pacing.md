@@ -28,3 +28,15 @@ To reach 20 to 45 minutes on every step from 8 to 15, one of these is needed:
 
 - Raise the late biome costs above $250M. This is a cut change, so it is the PM's call.
 - Make a later phase add a money sink, such as house tiers 4 and 5 ($40M and $500M), which this model leaves out.
+
+## Money sinks (Phase 5)
+
+Biome costs stay frozen and plant income is not retuned. The late steps are stretched by spending, not by lower income. These one-time purchases compete with the next biome unlock:
+
+| Sink | Costs |
+| --- | --- |
+| House tiers 2-5 | $25K, $1M, $40M, $500M |
+| Water (Channel, Sprinkler, Pond) | $50K, $2M, $75M |
+| Neon maker, Mega maker | $250K, $25M |
+
+Sinks after biome 8 total about $640M. At the late-game income in the table above, that is roughly the price of three more late biomes, so a player who buys them all spends well inside 20 to 45 minutes per late step. The sinks are optional, so the table above stays the floor for players who skip them.

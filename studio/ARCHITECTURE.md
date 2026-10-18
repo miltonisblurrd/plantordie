@@ -23,21 +23,23 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Products`: Developer Products (placeholder IDs are 0)
 - `Remotes`: every remote, with its kind, rate, and burst
 - `Format`: money and clock strings
-- `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` (Normal ×1, Neon ×3, Mega ×10). 60 species (4 per biome) from a `roster` table. Pacing formulas are in `studio/tasks/pod-v2/pacing.md`.
+- `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` from `Config.Economy.VariantMultiplier` (Normal ×1, Neon ×3, Mega ×8). Event plants (biome `halloween`, 7 species) come from the event roster. 60 species (4 per biome) from a `roster` table. Pacing formulas are in `studio/tasks/pod-v2/pacing.md`.
 - `Economy`: **the only income and growth maths.** Provides `incomeOf` (base × rarity × size × variant × bonuses), `growthMultiplier`, `growth` (stages 1-4), `rollSize`, and `offlineEarnings`.
 - `DropTables`: rarity weights per biome, exclusive to that biome. `weighted(biome, luck)` and `roll(biome, luck, r01)`. Luck is clamped by `Config.Dig.MaxLuck`.
-- `Upgrades`: 5 shovels (Rusty, Iron, Golden, Crystal, Void) with price, DigSeconds, LuckBonus and ToughTier
+- `Upgrades`: 5 shovels (Rusty, Iron, Golden, Crystal, Void) with price, DigSeconds, LuckBonus and ToughTier; water tiers (Channel $50K, Sprinkler $2M, Pond $75M) with growth multiplier and the water plant each unlocks (`waterAllows`, `nextWater`)
 - `Guardians`: 15 guardians (`List`, `ByBiome`) with shape, speeds, detect range, leash, catch range, path recompute interval and prediction
 - `Zombies`: 6 lane types plus the Rot King boss (every 5th night). `stats` scales by highest biome and night, `waveSize` scales by lanes, and `compose` builds a wave.
 - `Combat`: night stats for a planted record (role, damage, rate, range in studs, HP) from the `Plants` combat field, with size and variant power
-- Stubs that later phases fill: `Fusion`, `Events` (Halloween window and `active()`)
+- `Fusion`: Neon and Mega maker definitions (input/output variant, per-rarity seconds, unlock cost, skip product, pad)
+- `Events`: config-driven events. `Halloween2026` has its window, currency (Candy), decor key, dig and night rewards, pack odds (sum 100%), and 3 quests. `active(now)`, `odds`, `roll`
+- `Products`: also `ByKey`, `ById` (non-zero only) and `enabled(key)`; Id 0 means disabled
 
 ## Server (`src/server`)
 
 - `Boot.server`: start order. Net, then the world (Hub, Biomes, Plots), then Sync, DayNight, and Data.
 - `Net`: creates the remotes from `Remotes`. `on` and `onInvoke` wrap every handler with three checks: the player's profile is loaded, the player is within their rate limit for that remote, and the argument types are valid. Also provides `fire`, `fireAll`, and `notify`.
-- `Data/init`: player sessions. Loads use `UpdateAsync` with a session lock (`{jobId, time}`, stolen if older than 30 minutes or from the same job), 3 retries with backoff, and a kick on failure. A save only happens if the load succeeded. Autosave runs every 60s, a save runs on leave, and `BindToClose` flushes everything. Also: the receipt ledger (`recordReceipt`), and the `onLoaded`, `onReleasing`, `onChanged`, and `update` hooks.
-- `Data/Schema`: the `Profile` type, defaults, migrations (v2 stacks seeds by species and adds `lastSeen` and `starterGranted`; v3 adds `expedition`, the saved unbanked bag), and reconcile
+- `Data/init`: player sessions. Loads use `UpdateAsync` with a session lock (`{jobId, time}`, stolen if older than 30 minutes or from the same job), 3 retries with backoff, and a kick on failure. A save only happens if the load succeeded. Autosave runs every 60s, a save runs on leave, and `BindToClose` flushes everything. Also the `onLoaded`, `onReleasing`, `onChanged`, and `update` hooks.
+- `Data/Schema`: the `Profile` type, defaults, migrations (v2 stacks seeds by species and adds `lastSeen` and `starterGranted`; v3 adds `expedition`, the saved unbanked bag; v4 resets `fusion` to slots and adds `event.questsDone`, `credits`, `receiptLedger.pending`), and reconcile
 - `Data/Store`: the DataStore backend, or an in-memory fallback in Studio without API access (warns loudly). Setting the `DebugFailDataStore` attribute in Studio injects failures.
 - `Plots`: assigns one plot per player for the session. Provides `ownerOf(tile|plot)`, `isOwner(player, plot)`, `plotOf`, `plotAt`, `refresh` (lanes and house), the spawn location, and `onAssigned` / `onReleased` hooks.
 - `Biomes`: builds the gates, the 15 biomes and the trails. Provides `isUnlocked`, `highestUnlocked`, `info`, `regionOf`, `inRegion`, `inSafeZone`, `canEnter`, and `HubSpawn`. Its 0.5s enforcement loop sends anyone in a biome they can't enter back to the hub.
@@ -51,6 +53,10 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Defense/Core`: the pure lane simulation for one plot (plain tables, no instances). Covers plant roles, zombie movement and attacks, jump, ranged, traps, the house hit, stuck and timeout cleanup, and dawn. The harness runs it directly.
 - `Defense` (init): one loop for every plot. It builds a wave at nightfall, spawns at the right edge of an unlocked lane, steps `Core`, mirrors the result onto anchored zombie models with PivotTo, and batches `CombatFx`. It also handles wilting, house HP, wave loss with its penalty, the dawn reward, the pre-night warning, and the `Repair`, `UseTrap` and `HitZombie` remotes. Spawning pauses while the owner is in a biome.
 - `Shop`: `BuyLane` (in order), `BuyHouse` (biome-gated), `UnlockBiome` (released, in order, saved), and `BuyShovel` (next tier)
+- `Fusion/Core`: pure maker state machine (`status`, `matching`, `start` removes 4 atomically, `claim` idempotent by runId, `skip`). Status is derived from timestamps, so offline runs finish on their own. `Fusion` (init): unlock/start/claim remotes and pad billboards.
+- `Purchases/Core`: pure receipt ledger. Write PurchaseId + pending grant, save, grant only if saved; failed save rolls back to NotProcessedYet; `recover` applies pending grants on load. `Purchases` (init): `ProcessReceipt`, `apply` per product (unbankable grants become credits), `UseCredit`, `PurchaseIntent`, and the Studio-only `ServerStorage.DebugGrant` bindable (`debugGrant(player, key)`).
+- `Event`: the event manager. Every `CheckSeconds` it builds or removes `World/Builders/Events/<Decor>` and the fog, handles `EventBuyPack` (Candy or HalloweenPack product) and `EventDig`, awards Candy per night survived, and tracks quests.
+- `World/Builders/Machine`: maker pad with status billboard and `FusionPrompt`. `Plot.setWater` places channel, sprinklers and pond.
 - `Sync`: sends the HUD snapshot (`StateSync`, which includes a `defense` block) and tracks each player's area. `houseHp` and `setHouseHp` serve Defense. `setIncomeProvider` is the hook for P2 Garden.
 - `World/Parts`: the part factory, plus tree, rock, and surface-text helpers
 - `World/Layout`: placement maths. Plots sit on a ring at 45° steps. Gates sit 2 per sector between plot paths. Biomes are 240×240 squares on ring radius 760, two per plot gap. Each trail has 5 points (`biomePath`).
@@ -76,12 +82,16 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Inventory`: the seeds and plants panel. Picking an entry selects it in Placement.
 - `Shops`: the upgrades panel (house and next lane) and lane-sign prompts, all with a price confirm
 - `GardenView`: plant billboard text and the Mega rainbow
+- `Purchases`: `offer(key)` confirm → `PurchaseIntent` → prompt; disabled products only toast
+- `FusionPanel`: Neon/Mega panels (build, fuse groups of 4, progress, claim, skip)
+- `EventShop`: Halloween shop with countdown, Candy balance, odds table, quests, dig prompt
+- `Collection`: the index of every species × variant, event plants included
 - `Ui.confirm`: the modal used for every purchase or destructive action
 
 ## Remotes
 
 Server to client: `StateSync`, `DayNight`, `Notify`, `DigResult`, `Danger`, `CombatFx`.
-Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`, `Repair`, `UseTrap`, `HitZombie`. These are declared but not handled yet: `FusionStart`, `FusionClaim` (P5).
+Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`, `Repair`, `UseTrap`, `HitZombie`, `BuyWater`, `FusionUnlock`, `FusionStart`, `FusionClaim`, `PurchaseIntent`, `UseCredit`, `EventBuyPack`, `EventDig`.
 
 ## Rules for later phases
 
