@@ -326,26 +326,35 @@ local Sizes = require(Shared.Sizes)
 local sizeAvg, wsum = 0, 0
 for _, s in Sizes.List do sizeAvg += s.Multiplier * s.Weight; wsum += s.Weight end
 sizeAvg /= wsum
-local total, lastPerPlant = 0, 0
+-- Each step also waits one growth cycle: the refilled garden earns nothing until the newest
+-- biome's plants (drop-weighted average GrowSeconds) are grown.
+local total, totalGrow, lastPerPlant = 0, 0, 0
+local steps = {}
 for i = 1, #Biomes.List - 1 do
 	local b, nextB = Biomes.List[i], Biomes.List[i + 1]
 	local slots = Houses.List[1].Slots
 	for _, h in Houses.List do if h.RequiredBiome <= i then slots = h.Slots end end
-	local num, den = 0, 0
+	local num, den, grow = 0, 0, 0
 	for _, d in DropTables.ByBiome[b.Id] do
 		local p = Plants.ById[d.Plant]
 		num += d.Weight * p.BaseIncome * Rarities.ById[p.Rarity].Multiplier
+		grow += d.Weight * p.GrowSeconds
 		den += d.Weight
 	end
+	grow /= den
 	local income = slots * (num / den) * sizeAvg
 	local perPlant = income / slots
-	print(("%2d -> %2d  %-17s slots %2d  ~$%s/s  per plant ~$%s/s  next cost $%s  ~%.1f min"):format(i, i + 1, b.Id, slots,
-		tostring(math.floor(income)), tostring(math.floor(perPlant)), tostring(nextB.Cost), nextB.Cost / income / 60))
-	total += nextB.Cost / income / 60
+	local mins = (grow + nextB.Cost / income) / 60
+	print(("%2d -> %2d  %-17s slots %2d  ~$%s/s  per plant ~$%s/s  next cost $%s  grow %.1f min  ~%.1f min"):format(i, i + 1, b.Id, slots,
+		tostring(math.floor(income)), tostring(math.floor(perPlant)), tostring(nextB.Cost), grow / 60, mins))
+	total += mins
+	totalGrow += grow / 60
+	table.insert(steps, ("%.1f"):format(mins))
 	assert(perPlant >= lastPerPlant * 0.999, "per-plant income fell at biome " .. b.Id)
 	lastPerPlant = perPlant
 end
-print(("Total ~%.0f min (~%.1f h) of income time, excluding growth, refills and house purchases"):format(total, total / 60))
+print(("Total ~%.0f min (~%.1f h) including %.0f min of growth; excludes refill walks and house purchases"):format(total, total / 60, totalGrow))
+print("Minutes row: " .. table.concat(steps, " | "))
 
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
 local Core = require(Server.Defense.Core)

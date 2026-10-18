@@ -49,10 +49,7 @@ Keys: `InstantGrow`, `NeonSkip`, `MegaSkip`, `GrowthBoost`, `HalloweenPack`. If 
 
 ## Limitations (honest list)
 
-- **Placeholder product ids.** Every Developer Product id is 0, so Robux prompts are disabled and show a toast. Set real ids in `src/shared/Products.luau` after creating the products.
-- **No Studio playtest yet.** Everything is verified by static checks and the Luau harness only. A9 (guardian chase) and A24 (mobile) are BLOCKED-RUNTIME in `qa.md`.
-- **No Halloween guardian.** The event has decor, shop, dig spot, night rewards and quests, but no special guardian.
-- **Instant Grow fallback.** The target tile is not saved with the purchase intent. If it is lost (for example, a rejoin before the receipt), the grant goes to the plant with the most time left, or becomes a credit if nothing is growing.
-- **Pacing ignores growth time.** `pacing.md` counts income time only. It leaves out growth time, refilling slots, and money sinks (house tiers, water, makers), so real progression is slower than the table.
-- Most sound ids are 0 (no sound) until library ids are picked; they all live in `src/shared/Sounds.luau`.
+- **Product ids are the owner's dashboard step.** Every Developer Product id is 0, so Robux prompts stay disabled and show a toast. The owner creates each product in the Creator Dashboard and pastes its numeric id into `src/shared/Products.luau`.
+- **No Studio playtest yet.** Everything is verified by static checks and the Luau harness only. A9 (guardian chase, including the Halloween guardian) and A24 (mobile) are BLOCKED-RUNTIME in `qa.md`.
+- **Late pacing runs long.** With growth time included, steps 12 to 15 take 56 to 115 minutes (see `pacing.md`). Economy retuning is out of this cut.
 - Settings are per session and not saved to the profile.

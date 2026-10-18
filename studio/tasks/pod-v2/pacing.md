@@ -10,24 +10,24 @@ The numbers live in `src/shared/Plants.luau`. `studio/tools/world_harness.py` re
 
 ## Model
 
-The model assumes a full garden of drops from the newest unlocked biome, at the drop-table rarity mix and an average size multiplier of 2.25. House slots are those of the best house allowed by that biome. Growth time, refill time and house purchases are ignored, so real play takes longer.
+The model assumes a full garden of drops from the newest unlocked biome, at the drop-table rarity mix and an average size multiplier of 2.25. House slots are those of the best house allowed by that biome.
 
-## Minutes to afford the next biome (revised 2026-10-18)
+Each step also includes one growth cycle. After a refill, the garden earns nothing until the newest biome's plants are grown, so the model adds their drop-weighted average GrowSeconds. Refill walking time and house purchases are still left out, so real play takes a little longer. Income, biome costs and house prices are unchanged. Only the model changed.
+
+## Minutes to afford the next biome (revised 2026-10-18, growth included)
 
 | Step | 1→2 | 2→3 | 3→4 | 4→5 | 5→6 | 6→7 | 7→8 | 8→9 | 9→10 | 10→11 | 11→12 | 12→13 | 13→14 | 14→15 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Minutes | 6.2 | 6.1 | 9.9 | 11.9 | 8.2 | 10.1 | 9.3 | 11.7 | 14.8 | 18.4 | 19.6 | 24.9 | 31.0 | 38.5 |
+| Growth (min) | 0.6 | 0.9 | 1.2 | 2.3 | 2.2 | 4.1 | 3.9 | 7.2 | 7.2 | 12.7 | 23.8 | 31.4 | 57.8 | 76.7 |
+| Minutes | 6.7 | 6.9 | 11.1 | 14.2 | 10.4 | 14.2 | 13.3 | 18.9 | 22.0 | 31.0 | 43.4 | 56.3 | 88.8 | 115.2 |
 
-Total: about 221 minutes (3.7 hours) of income time, up from about 2 hours.
+Total: about 453 minutes (7.5 hours). That is 221 minutes of income time plus 232 minutes of growth. The previous table, which left growth out, said about 221 minutes (3.7 hours).
 
-## Why the late steps stop at about 39 minutes, not 45
+## What growth changes
 
-The cut fixes biome costs: geometric to $25M, then roughly ×1.25 per biome up to $250M. With costs fixed, a longer step can only come from a lower garden income. Going lower than the table above would make a newer biome's plants earn less per plant than older ones, so players would have no reason to plant them. The harness enforces that floor.
+The early steps barely move, because those plants grow in under a minute. From biome 8 on, growth is a large share of each step. Steps 8 to 11 now land inside the 20 to 45 minute target. Steps 12 to 15 run over it (56, 89 and 115 minutes), because the late biomes' Legendary and Mythical plants take a long time to grow.
 
-To reach 20 to 45 minutes on every step from 8 to 15, one of these is needed:
-
-- Raise the late biome costs above $250M. This is a cut change, so it is the PM's call.
-- Make a later phase add a money sink, such as house tiers 4 and 5 ($40M and $500M), which this model leaves out.
+Retuning is out of this cut. Bringing steps 12 to 15 back under 45 minutes would mean shorter late GrowSeconds or cheaper late biomes, and either one is the PM's call.
 
 ## Money sinks (Phase 5)
 
@@ -39,4 +39,4 @@ Biome costs stay frozen and plant income is not retuned. The late steps are stre
 | Water (Channel, Sprinkler, Pond) | $50K, $2M, $75M |
 | Neon maker, Mega maker | $250K, $25M |
 
-Sinks after biome 8 total about $640M. At the late-game income in the table above, that is roughly the price of three more late biomes, so a player who buys them all spends well inside 20 to 45 minutes per late step. The sinks are optional, so the table above stays the floor for players who skip them.
+Sinks after biome 8 total about $640M. At the late-game income in the table above, that is roughly the price of three more late biomes, so buying them all makes the late steps longer still. The sinks are optional, so the table above stays the floor for players who skip them.

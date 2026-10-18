@@ -23,7 +23,7 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Products`: Developer Products (placeholder IDs are 0)
 - `Remotes`: every remote, with its kind, rate, and burst
 - `Format`: money, clock and duration strings
-- `Sounds`: **the only place sound ids live** (Dig, Discover, Plant, Buy, Error, NightWarning, WaveClear, FusionDone, GuardianWarning, Music). `uri(name)` returns nil for id 0, so playback no-ops.
+- `Sounds`: **the only place sound ids live** (Dig, Discover, Plant, Buy, Click, Error, NightWarning, WaveClear, FusionDone, GuardianWarning, Music). `uri(name)` returns nil for id 0, so playback no-ops.
 - `Discovery`: the collection set shown in the index, derived from the saved `collection` plus held seeds, bag, inventory and planted plants. `best(set, species)` gives the highest variant.
 - `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` from `Config.Economy.VariantMultiplier` (Normal ×1, Neon ×3, Mega ×8). Event plants (biome `halloween`, 7 species) come from the event roster. 60 species (4 per biome) from a `roster` table. Pacing formulas are in `studio/tasks/pod-v2/pacing.md`.
 - `Economy`: **the only income and growth maths.** Provides `incomeOf` (base × rarity × size × variant × bonuses), `growthMultiplier`, `growth` (stages 1-4), `rollSize`, and `offlineEarnings`.
@@ -33,7 +33,7 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Zombies`: 6 lane types plus the Rot King boss (every 5th night). `stats` scales by highest biome and night, `waveSize` scales by lanes, and `compose` builds a wave.
 - `Combat`: night stats for a planted record (role, damage, rate, range in studs, HP) from the `Plants` combat field, with size and variant power
 - `Fusion`: Neon and Mega maker definitions (input/output variant, per-rarity seconds, unlock cost, skip product, pad)
-- `Events`: config-driven events. `Halloween2026` has its window, currency (Candy), decor key, dig and night rewards, pack odds (sum 100%), and 3 quests. `active(now)`, `odds`, `roll`
+- `Events`: config-driven events. `Halloween2026` has its window, currency (Candy), decor key, dig and night rewards, pack odds (sum 100%), and 3 quests, plus a `Guardian` zone (centre and radius) in the hub. `active(now)`, `guardianEvent(now)`, `odds`, `roll`
 - `Products`: also `ByKey`, `ById` (non-zero only) and `enabled(key)`; Id 0 means disabled
 
 ## Server (`src/server`)
@@ -48,7 +48,7 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Expedition`: the unbanked bag. Provides `add`, `lose` (clears only the bag), and `bank`. A loop banks the bag at the player's own plot or by the fountain.
 - `Dig`: the `Dig` remote. Checks the spot, distance, region access, equipped shovel, tough tier and cooldown, then rolls the drop, respawns the spot later, and fires `DigResult`.
 - `Tools`: gives the Shovel tool on spawn
-- `GuardianAI`: one Heartbeat loop for every guardian (Patrol, Chase, Cooldown). Throttled off-thread PathfindingService with a direct-move fallback, a stuck reset, and loss on leash, safe zone or leaving the region. A catch clears the bag and sends the player home. Guardians in empty biomes sleep.
+- `GuardianAI`: one Heartbeat loop for every guardian (Patrol, Chase, Cooldown). Throttled off-thread PathfindingService with a direct-move fallback, a stuck reset, and loss on leash, safe zone or leaving the region. A catch clears the bag and sends the player home. Guardians in empty biomes sleep. Each guardian carries its own zone functions (region, safe zone, clamp). `setEventGuardian(id?)`, called from `Event.apply`, spawns the event's guardian (`Guardians.Event[id]`) over the event zone and removes it when the event ends.
 - `DayNight`: the synced cycle. Broadcasts `(phase, endsAt, duration, night)` and moves `Lighting.ClockTime`. Provides an `onPhaseChanged` hook for P4.
 - `Garden` also provides `onPlantChanged`, `isGrown`, `setWilted` and `wiltedKeys`. Wilted plants earn nothing until dawn or a repair.
 - `Garden`: planting, placing and removing plants (`PlantSeed`, `PlacePlant`, `RemovePlant`), plant models rebuilt from `profile.planted`, the 1s income and stage tick, offline earnings, and the starter pack. `incomeOf` feeds Sync.
@@ -56,7 +56,7 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Defense` (init): one loop for every plot. It builds a wave at nightfall, spawns at the right edge of an unlocked lane, steps `Core`, mirrors the result onto anchored zombie models with PivotTo, and batches `CombatFx`. It also handles wilting, house HP, wave loss with its penalty, the dawn reward, the pre-night warning, and the `Repair`, `UseTrap` and `HitZombie` remotes. Spawning pauses while the owner is in a biome.
 - `Shop`: `BuyLane` (in order), `BuyHouse` (biome-gated), `UnlockBiome` (released, in order, saved), and `BuyShovel` (next tier)
 - `Fusion/Core`: pure maker state machine (`status`, `matching`, `start` removes 4 atomically, `claim` idempotent by runId, `skip`). Status is derived from timestamps, so offline runs finish on their own. `Fusion` (init): unlock/start/claim remotes and pad billboards.
-- `Purchases/Core`: pure receipt ledger. Write PurchaseId + pending grant, save, grant only if saved; failed save rolls back to NotProcessedYet; `recover` applies pending grants on load. `Purchases` (init): `ProcessReceipt`, `apply` per product (unbankable grants become credits), `UseCredit`, `PurchaseIntent`, and the Studio-only `ServerStorage.DebugGrant` bindable (`debugGrant(player, key)`).
+- `Purchases/Core`: pure receipt ledger. Write PurchaseId + pending grant, save, grant only if saved; failed save rolls back to NotProcessedYet; `recover` applies pending grants on load. `Purchases` (init): `ProcessReceipt`, `apply` per product (unbankable grants become credits), `UseCredit`, `PurchaseIntent` (Instant Grow saves the target plant's uid in `profile.purchaseIntent`; the receipt finishes only that plant, or banks one credit if it is gone), and the Studio-only `ServerStorage.DebugGrant` bindable (`debugGrant(player, key)`).
 - `Event`: the event manager. Every `CheckSeconds` it builds or removes `World/Builders/Events/<Decor>` and the fog, handles `EventBuyPack` (Candy or HalloweenPack product) and `EventDig`, awards Candy per night survived, and tracks quests.
 - `World/Builders/Machine`: maker pad with status billboard and `FusionPrompt`. `Plot.setWater` places channel, sprinklers and pond.
 - `Sync`: sends the HUD snapshot (`StateSync`, which includes a `defense` block) and tracks each player's area. `houseHp` and `setHouseHp` serve Defense. `setIncomeProvider` is the hook for P2 Garden.
