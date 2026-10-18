@@ -529,6 +529,79 @@ for _, k in { 1, 5, 10, 15 } do
 	for _, pl in pea do best = math.max(best, pl.Combat.Damage * pl.Combat.AttackRate) end
 	print(("  biome %2d: Walker HP %d, dmg %.1f; best plant DPS in that biome %.1f"):format(k, w.hp, w.damage, best))
 end
+
+print("\n-- Fusion state machine --")
+do
+	local FCore = require(Server.Fusion.Core)
+	local FData = require(Shared.Fusion)
+	local function slot(u) return { unlocked = u, state = "empty", runId = 0, startedAt = 0, endsAt = 0 } end
+	local prof = { plants = {}, nextItemId = 1, collection = {}, fusion = { Neon = slot(false), Mega = slot(false) } }
+	for i = 1, 5 do
+		prof.plants[tostring(i)] = { id = tostring(i), species = "PeaPopper", rarity = Plants.ById.PeaPopper.Rarity, size = "Medium", variant = "Normal" }
+		prof.nextItemId = i + 1
+	end
+	prof.plants["9"] = { id = "9", species = "PeaPopper", rarity = "Common", size = "Large", variant = "Normal" }
+	local ok = FCore.start(prof, "Neon", "PeaPopper", "Medium", 0)
+	assert(not ok, "locked machine must refuse")
+	prof.fusion.Neon.unlocked = true
+	ok = FCore.start(prof, "Neon", "PeaPopper", "Medium", 100)
+	assert(ok)
+	local left = 0
+	for _ in prof.plants do left += 1 end
+	assert(left == 2 and prof.plants["5"] and prof.plants["9"], "exactly 4 same-size removed")
+	assert(#(prof.fusion.Neon.ingredients :: any) == FData.InputCount)
+	assert(not FCore.start(prof, "Neon", "PeaPopper", "Medium", 101), "busy machine refuses")
+	local run = prof.fusion.Neon.runId
+	assert(FCore.status(prof.fusion.Neon, 101) == "fusing")
+	local early = FCore.claim(prof, "Neon", run, 101)
+	assert(early == nil, "cannot claim while fusing")
+	local done = prof.fusion.Neon.endsAt
+	assert(FCore.status(prof.fusion.Neon, done + 3600) == "ready", "offline completion by timestamp")
+	local id1, g1 = FCore.claim(prof, "Neon", run, done)
+	local id2, g2 = FCore.claim(prof, "Neon", run, done + 1)
+	local neon = 0
+	for _, it in prof.plants do if it.variant == "Neon" then neon += 1 end end
+	assert(g1 and not g2 and id1 == id2 and neon == 1, "double claim grants once")
+	assert(prof.fusion.Neon.state == "empty" and prof.collection["PeaPopper|Neon"])
+	print(("  start removes 4 (left %d), claim granted=%s, repeat granted=%s, Neon items=%d"):format(left, tostring(g1), tostring(g2), neon))
+end
+
+print("\n-- Receipt ledger --")
+do
+	local PCore = require(Server.Purchases.Core)
+	local ledger = { order = {}, seen = {}, pending = {} }
+	local grants, saves = 0, 0
+	local function grant() grants += 1 end
+	local function saveOk() saves += 1 return true end
+	local r1 = PCore.process(ledger, "P1", "Skip", nil, saveOk, grant)
+	local r2 = PCore.process(ledger, "P1", "Skip", nil, saveOk, grant)
+	assert(r1 == "Granted" and r2 == "Granted" and grants == 1 and saves == 1, "same PurchaseId grants once")
+	local r3 = PCore.process(ledger, "P2", "Skip", nil, function() return false end, grant)
+	assert(r3 == "NotProcessedYet" and grants == 1 and not ledger.seen.P2, "failed save grants nothing")
+	local r4 = PCore.process(ledger, "P3", "Skip", nil, function() error("ds down") end, grant)
+	assert(r4 == "NotProcessedYet" and grants == 1, "erroring save grants nothing")
+	local granted = false
+	PCore.process(ledger, "P4", "Skip", nil, function() assert(not granted and ledger.pending.P4) return true end, function() granted = true end)
+	assert(granted, "grant only after ledger written")
+	ledger.seen.P5, ledger.pending.P5 = true, { key = "GrowthBoost" }
+	local n = PCore.recover(ledger, grant)
+	assert(n == 1 and grants == 2 and PCore.recover(ledger, grant) == 0, "recover applies pending once")
+	print(("  P1 twice -> %d grant; failed/erroring save -> %s/%s; recover -> %d"):format(1, r3, r4, n))
+end
+
+print("\n-- Halloween event --")
+do
+	local Events = require(Shared.Events)
+	local Products = require(Shared.Products)
+	for _, e in Events.List do
+		local sum = 0
+		for _, row in Events.odds(e.Pack) do sum += row.Percent or row.Weight or 0 end
+		local count = #(Plants.ByBiome[e.Biome] or {})
+		print(("  %s: %d plants, odds sum %.2f%%, %d quests"):format(e.Id, count, sum, #e.Quests))
+		assert(math.abs(sum - 100) < 1e-6 and count == 7 and #e.Quests == 3)
+	end
+	for _, p in Products.List do assert(not Products.enabled(p.Key) or p.Id ~= 0) end
+end
 '''
 
 
