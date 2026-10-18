@@ -56,8 +56,10 @@ end
 --   BaseIncome  = BIOME_INCOME[biome] x flavour        ($/s before rarity/size/variant)
 --   GrowSeconds = BIOME_GROW[biome]   x RARITY_GROW[rarity]
 -- Economy.incomeOf then applies rarity (1..25x) and size (1..25x). A full garden of the newest
--- biome's typical drops (avg rarity x size ~ 3.4x) earns the next biome's cost in ~6-12 minutes.
-local BIOME_INCOME = { 2, 8, 52, 185, 500, 480, 640, 550, 830, 800, 540, 700, 600, 750, 900 }
+-- biome's typical drops earns the next biome's cost in ~6-12 minutes for biomes 1-6, stretching to
+-- ~10-40 minutes for 7-15. Late values look uneven because each biome's rarity mix differs; the
+-- garden's average income per plant still rises every biome (checked by the harness).
+local BIOME_INCOME = { 2, 8, 52, 185, 500, 334, 525, 338, 475, 335, 217, 219, 146, 147, 180 }
 local BIOME_GROW = { 30, 40, 55, 75, 100, 135, 180, 240, 320, 420, 560, 740, 980, 1300, 1700 }
 local RARITY_GROW: { [string]: number } =
 	{ Common = 1, Uncommon = 1.4, Rare = 2, Epic = 3, Legendary = 4.5, Mythical = 6, Divine = 9 }

@@ -321,6 +321,7 @@ local Sizes = require(Shared.Sizes)
 local sizeAvg, wsum = 0, 0
 for _, s in Sizes.List do sizeAvg += s.Multiplier * s.Weight; wsum += s.Weight end
 sizeAvg /= wsum
+local total, lastPerPlant = 0, 0
 for i = 1, #Biomes.List - 1 do
 	local b, nextB = Biomes.List[i], Biomes.List[i + 1]
 	local slots = Houses.List[1].Slots
@@ -332,9 +333,14 @@ for i = 1, #Biomes.List - 1 do
 		den += d.Weight
 	end
 	local income = slots * (num / den) * sizeAvg
-	print(("%2d -> %2d  %-17s slots %2d  ~$%s/s  next cost $%s  ~%.1f min"):format(i, i + 1, b.Id, slots,
-		tostring(math.floor(income)), tostring(nextB.Cost), nextB.Cost / income / 60))
+	local perPlant = income / slots
+	print(("%2d -> %2d  %-17s slots %2d  ~$%s/s  per plant ~$%s/s  next cost $%s  ~%.1f min"):format(i, i + 1, b.Id, slots,
+		tostring(math.floor(income)), tostring(math.floor(perPlant)), tostring(nextB.Cost), nextB.Cost / income / 60))
+	total += nextB.Cost / income / 60
+	assert(perPlant >= lastPerPlant * 0.999, "per-plant income fell at biome " .. b.Id)
+	lastPerPlant = perPlant
 end
+print(("Total ~%.0f min (~%.1f h) of income time, excluding growth, refills and house purchases"):format(total, total / 60))
 '''
 
 
