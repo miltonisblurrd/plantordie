@@ -16,11 +16,11 @@ export type Product = {
 }
 
 local list: { Product } = {
-	{ Key = "InstantGrow", Id = 0, PriceRobux = 25, Benefit = "Instantly finish growing the plant you picked. If that plant is gone or grown by the time the purchase completes, you keep an Instant Grow credit to use on any growing plant." },
-	{ Key = "NeonSkip", Id = 0, PriceRobux = 49, Benefit = "Finish your current Neon Maker fusion now. With no fusion running, you keep a skip to use later." },
-	{ Key = "MegaSkip", Id = 0, PriceRobux = 99, Benefit = "Finish your current Mega Maker fusion now. With no fusion running, you keep a skip to use later." },
-	{ Key = "GrowthBoost", Id = 0, PriceRobux = 79, Benefit = "2x growth speed for every plant for 30 minutes (stacks time if already active).", Seconds = 30 * 60 },
-	{ Key = "HalloweenPack", Id = 0, PriceRobux = 149, Benefit = "One Halloween Seed Pack: 1 seed rolled from the odds table shown.", Event = "Halloween2026" },
+	{ Key = "InstantGrow", Id = 3719421531, PriceRobux = 27, Benefit = "Instantly finish growing the plant you picked. If that plant is gone or grown by the time the purchase completes, you keep an Instant Grow credit to use on any growing plant." },
+	{ Key = "NeonSkip", Id = 3719421808, PriceRobux = 27, Benefit = "Finish your current Neon Maker fusion now. With no fusion running, you keep a skip to use later." },
+	{ Key = "MegaSkip", Id = 3719422040, PriceRobux = 39, Benefit = "Finish your current Mega Maker fusion now. With no fusion running, you keep a skip to use later." },
+	{ Key = "GrowthBoost", Id = 3719422286, PriceRobux = 4, Benefit = "2x growth speed for every plant for 30 minutes (stacks time if already active).", Seconds = 30 * 60 },
+	{ Key = "HalloweenPack", Id = 3719422493, PriceRobux = 149, Benefit = "One Halloween Seed Pack: 1 seed rolled from the odds table shown.", Event = "Halloween2026" },
 }
 
 local byKey: { [string]: Product } = {}
