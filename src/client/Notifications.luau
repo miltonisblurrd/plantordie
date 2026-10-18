@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local Ui = require(script.Parent.Ui)
+local Sfx = require(script.Parent.Sfx)
 
 local Notifications = {}
 
@@ -19,6 +20,9 @@ local KIND_COLORS: { [string]: Color3 } = {
 }
 
 function Notifications.show(text: string, kind: string?, seconds: number?)
+	if kind == "error" then
+		Sfx.play("Error")
+	end
 	local root = container
 	if not root then
 		return

@@ -77,12 +77,6 @@ local Config = {
 		DangerZoneRadius = 22,
 	},
 
-	Sounds = {
-		-- Built-in Roblox client sounds (always available, no moderation risk).
-		GuardianAlert = "rbxasset://sounds/electronicpingshort.wav",
-		DigFind = "rbxasset://sounds/button.wav",
-	},
-
 	Plot = {
 		Width = 170, -- along lanes (local X)
 		Depth = 110, -- across lanes (local Z)

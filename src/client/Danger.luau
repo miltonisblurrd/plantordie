@@ -3,11 +3,11 @@
 -- alert sound. Driven only by the server's Danger event, which only the target receives.
 
 local Players = game:GetService("Players")
-local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
+local Sfx = require(script.Parent.Sfx)
 
 local Danger = {}
 
@@ -48,13 +48,8 @@ function Danger.start()
 	sub.Size = UDim2.new(1, -16, 0, 20)
 	sub.Position = UDim2.fromOffset(8, 38)
 
-	local sound = Instance.new("Sound")
-	sound.Name = "GuardianAlert"
-	sound.Volume = 0.8
-	sound.Parent = SoundService
-
 	local pulse: Tween? = nil
-	State.remote("Danger").OnClientEvent:Connect(function(on: boolean, name: string?, soundId: string?)
+	State.remote("Danger").OnClientEvent:Connect(function(on: boolean, name: string?)
 		gui.Enabled = on
 		if pulse then
 			pulse:Cancel()
@@ -64,10 +59,7 @@ function Danger.start()
 			return
 		end
 		title.Text = `{name or "A guardian"} is chasing you!`
-		if soundId then
-			sound.SoundId = soundId
-			sound:Play()
-		end
+		Sfx.play("GuardianWarning")
 		local info = TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
 		for _, f in edges do
 			f.BackgroundTransparency = 0

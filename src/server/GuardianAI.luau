@@ -17,6 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local GuardianDefs = require(ReplicatedStorage.Shared.Guardians)
+local Sounds = require(ReplicatedStorage.Shared.Sounds)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
 local Expedition = require(script.Parent.Expedition)
@@ -100,7 +101,7 @@ end
 
 local function setDanger(player: Player, on: boolean, g: Guardian?)
 	if player.Parent then
-		Net.fire("Danger", player, on, if g then g.def.Name else nil, Config.Sounds.GuardianAlert)
+		Net.fire("Danger", player, on, if g then g.def.Name else nil)
 	end
 end
 
@@ -287,7 +288,7 @@ function GuardianAI.start(worldFolder: Instance)
 			local model = GuardianRig.build(def, CFrame.new(pos), folder)
 			local alert = Instance.new("Sound")
 			alert.Name = "Alert"
-			alert.SoundId = Config.Sounds.GuardianAlert
+			alert.SoundId = Sounds.uri("GuardianWarning") or ""
 			alert.Volume = 1
 			alert.RollOffMaxDistance = 120
 			alert.Parent = model.PrimaryPart

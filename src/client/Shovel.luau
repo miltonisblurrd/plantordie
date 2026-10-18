@@ -16,6 +16,7 @@ local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 local Notifications = require(script.Parent.Notifications)
+local Sfx = require(script.Parent.Sfx)
 
 local Shovel = {}
 
@@ -81,6 +82,7 @@ local function onActivated(tool: Tool)
 	end
 	lastSwing = now
 	swing(tool)
+	Sfx.play("Dig")
 	State.remote("Dig"):FireServer(spot:GetAttribute("SpotId"))
 end
 
@@ -138,11 +140,7 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 	TweenService:Create(label, TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 		{ TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
 
-	local sound = Instance.new("Sound")
-	sound.SoundId = Config.Sounds.DigFind
-	sound.Volume = 0.7
-	sound.Parent = anchor
-	sound:Play()
+	Sfx.play("Discover")
 	Debris:AddItem(anchor, 2)
 
 	if order >= 5 then
@@ -150,7 +148,7 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 	end
 end
 
-local function buildPanel(bar: Frame)
+local function buildPanel(bar: GuiObject)
 	local gui = Ui.screen("ShovelPanel", player:WaitForChild("PlayerGui"), 4)
 	local p = Ui.panel("Panel", UDim2.fromOffset(340, 200), gui)
 	p.AnchorPoint = Vector2.new(0.5, 1)
@@ -208,7 +206,7 @@ local function buildPanel(bar: Frame)
 	end)
 end
 
-function Shovel.start(bar: Frame)
+function Shovel.start(bar: GuiObject)
 	buildPanel(bar)
 	local function watch(container: Instance)
 		for _, c in container:GetChildren() do

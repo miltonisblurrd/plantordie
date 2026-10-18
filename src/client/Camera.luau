@@ -1,6 +1,6 @@
 --!strict
 -- Elevated, angled view over your lanes while you stand on your own plot. Toggle with the
--- on-screen button or the C key. Falls back to the default follow camera everywhere else.
+-- on-screen button, the C key, or Settings (camera mode). Falls back to the default follow camera everywhere else.
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -8,6 +8,7 @@ local TweenService = game:GetService("TweenService")
 
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
+local Settings = require(script.Parent.Settings)
 
 local CameraController = {}
 
@@ -67,8 +68,7 @@ local function apply()
 end
 
 function CameraController.toggle()
-	enabled = not enabled
-	apply()
+	Settings.set("laneView", not enabled)
 end
 
 function CameraController.start()
@@ -83,6 +83,12 @@ function CameraController.start()
 	UserInputService.InputBegan:Connect(function(input, processed)
 		if not processed and input.KeyCode == Enum.KeyCode.C then
 			CameraController.toggle()
+		end
+	end)
+	Settings.onChanged(function(v)
+		if v.laneView ~= enabled then
+			enabled = v.laneView
+			apply()
 		end
 	end)
 	State.onSnapshot(function()
