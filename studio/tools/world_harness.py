@@ -266,6 +266,9 @@ trailTotal = (#Layout.biomePath(1) - 1) * #Biomes.List
 print(("15 biomes incl. guardians: %d"):format(biomeTotal))
 print(("Trails: %d segments"):format(trailTotal))
 print(("World total at boot: ~%d parts (+ planted plant models at runtime)"):format(Parts.count() + trailTotal))
+print(("Halloween decor (only while the event is active): %d"):format(delta(function()
+	require(Server.World.Builders.Events.Halloween).build(world)
+end)))
 
 print("\n== Roster ==")
 local rarityCount = {}

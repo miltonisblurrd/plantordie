@@ -6,8 +6,8 @@ Status: harness PASS. Studio play-test is PENDING (QA needs to run it on the pre
 
 - Product ids are all 0, so live prompts are disabled and only show a toast. Use DebugGrant to test grants.
 - DebugGrant exists only in Studio. Run it from the server command bar:
-  `game.ServerStorage.DebugGrant:Invoke(game.Players:GetPlayers()[1], "Skip")`
-  Keys: `InstantGrow`, `Skip`, `GrowthBoost`, `HalloweenPack`. An optional third argument is a PurchaseId; reusing one must grant only once.
+  `game.ServerStorage.DebugGrant:Invoke(game.Players:GetPlayers()[1], "NeonSkip")`
+  Keys: `InstantGrow`, `NeonSkip`, `MegaSkip`, `GrowthBoost`, `HalloweenPack`. An optional third argument is a PurchaseId; reusing one must grant only once.
 - To test a failed save, set `workspace:SetAttribute("DebugFailDataStore", true)` and then invoke DebugGrant. Expected result: NotProcessedYet and nothing granted. Clear the attribute and invoke again with the same PurchaseId; it should grant once.
 
 ## Checks

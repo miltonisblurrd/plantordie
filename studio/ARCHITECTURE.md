@@ -22,7 +22,9 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Biomes`: the 15 biomes in order, with unlock cost, palette, `Released`, `DigStyle` and `ToughTier`
 - `Products`: Developer Products (placeholder IDs are 0)
 - `Remotes`: every remote, with its kind, rate, and burst
-- `Format`: money and clock strings
+- `Format`: money, clock and duration strings
+- `Sounds`: **the only place sound ids live** (Dig, Discover, Plant, Buy, Error, NightWarning, WaveClear, FusionDone, GuardianWarning, Music). `uri(name)` returns nil for id 0, so playback no-ops.
+- `Discovery`: the collection set shown in the index, derived from the saved `collection` plus held seeds, bag, inventory and planted plants. `best(set, species)` gives the highest variant.
 - `Plants`: full §4 definitions (income, grow time, optional size weights, model recipe, optional combat block, water flag) plus `Variants` from `Config.Economy.VariantMultiplier` (Normal ×1, Neon ×3, Mega ×8). Event plants (biome `halloween`, 7 species) come from the event roster. 60 species (4 per biome) from a `roster` table. Pacing formulas are in `studio/tasks/pod-v2/pacing.md`.
 - `Economy`: **the only income and growth maths.** Provides `incomeOf` (base × rarity × size × variant × bonuses), `growthMultiplier`, `growth` (stages 1-4), `rollSize`, and `offlineEarnings`.
 - `DropTables`: rarity weights per biome, exclusive to that biome. `weighted(biome, luck)` and `roll(biome, luck, r01)`. Luck is clamped by `Config.Dig.MaxLuck`.
@@ -66,9 +68,9 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 
 ## Client (`src/client`)
 
-- `Boot.client`: starts the controllers
+- `Boot.client`: starts the controllers and the action bar (a horizontal ScrollingFrame, capped at 820 px, that scrolls on narrow screens)
 - `State`: the only inbound data path (`StateSync`, `DayNight`)
-- `Ui`: brand primitives and a `ScreenGui` with safe-area insets and a `UIScale`
+- `Ui`: brand primitives and a `ScreenGui` with safe-area insets (respects the top bar) and a `UIScale`. On touch screens every fixed-offset button is grown to at least 44 px after scaling.
 - `Hud`: money, income/sec, area (the current biome, safe zone or trail), the bag, the day/night countdown, house HP, and the event slot
 - `Notifications`: toasts from the `Notify` remote
 - `Camera`: the elevated lane view on your own plot (toggle with the C key or the button)
@@ -81,17 +83,27 @@ Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 a
 - `Inspect`: the plant popup (species, rarity colour, size, variant, timer, income, and a confirmed dig-up)
 - `Inventory`: the seeds and plants panel. Picking an entry selects it in Placement.
 - `Shops`: the upgrades panel (house and next lane) and lane-sign prompts, all with a price confirm
-- `GardenView`: plant billboard text and the Mega rainbow
+- `GardenView`: plant billboard text, the Mega rainbow (off under reduced effects), and the pop-in for new plant models (covers planting and each growth stage, since the server rebuilds the model per stage)
 - `Purchases`: `offer(key)` confirm → `PurchaseIntent` → prompt; disabled products only toast
 - `FusionPanel`: Neon/Mega panels (build, fuse groups of 4, progress, claim, skip)
 - `EventShop`: Halloween shop with countdown, Candy balance, odds table, quests, dig prompt
-- `Collection`: the index of every species × variant, event plants included
+- `Collection`: the index of every species grouped by biome (event last). Discovered species show head colour, rarity colour and best variant; locked ones show a dark silhouette and "???".
+- `Settings` / `SettingsPanel`: music and SFX volume, camera mode (lane view or follow), reduced effects. Per session, client only.
+- `Sfx`: 2D playback by name through the `Sfx`/`Music` SoundGroups.
+- `Effects`: reduced effects (disables every ParticleEmitter, Sparkles, Fire, Smoke and Trail, including ones spawned later) and the shared 0.25 s pop tween.
+- `Feedback`: sounds and pops derived from state changes (Buy, NightWarning, WaveClear, FusionDone, the claim pop on the maker core), so feedback only fires for what the server did.
 - `Ui.confirm`: the modal used for every purchase or destructive action
 
 ## Remotes
 
 Server to client: `StateSync`, `DayNight`, `Notify`, `DigResult`, `Danger`, `CombatFx`.
 Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`, `Repair`, `UseTrap`, `HitZombie`, `BuyWater`, `FusionUnlock`, `FusionStart`, `FusionClaim`, `PurchaseIntent`, `UseCredit`, `EventBuyPack`, `EventDig`.
+
+## Part and effect budget
+
+- **Boot:** about 3,100 parts (harness "Part counts"): hub 63, 8 plots 776 (97 each, including the tier-1 house and maker pads), 15 gates 105, 15 biomes with guardians 2,108, trails 60. While active, the Halloween decor adds 86 (harness). Planted plant models add 3 to 8 parts each at runtime, capped by house slots.
+- **Zombies:** each model is 5 to 7 anchored parts, moved with PivotTo. `Config.Defense.MaxPerPlot = 18` alive per plot, so at most about 126 per plot and about 1,000 across 8 plots during a night. Stuck zombies despawn after 8 s, every zombie after 100 s, all at dawn.
+- **Particles:** only Neon plants (1 slow ParticleEmitter and a PointLight), Mega plants (Sparkles plus the client rainbow) and the sprinkler spray emit. Combat VFX are short tweened parts cleaned up by Debris. Under reduced effects, the client disables every emitter, sparkle, fire, smoke and trail (restored when turned off), skips the rainbow cycle and the pop tweens. Lights stay.
 
 ## Rules for later phases
 
