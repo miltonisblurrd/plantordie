@@ -12,7 +12,12 @@ export type Biome = {
 	Name: string,
 	Cost: number,
 	Palette: Palette,
+	Released: boolean, -- false = gate shown but region always bounces players (A7)
+	DigStyle: DigStyle,
+	ToughTier: number, -- shovel tier needed for this biome's tough-soil spots
 }
+
+export type DigStyle = "Mound" | "Rock" | "Glow" 
 
 local function p(g: string, a1: string, a2: string, prop: string): Palette
 	return {
@@ -25,7 +30,7 @@ end
 
 -- Order is gameplay order. Costs: free, x10 steps to $25M, then ~x1.26 per biome to $250M.
 -- Adjacent biomes never share a ground colour (brand.md).
-local list: { Biome } = {
+local list: { Biome } = ({
 	{ Index = 1, Id = "GreenMeadows", Name = "Green Meadows", Cost = 0, Palette = p("#5BD15B", "#FFE066", "#FF8FB1", "#3E8E41") },
 	{ Index = 2, Id = "MushroomForest", Name = "Mushroom Forest", Cost = 25_000, Palette = p("#6B4F8C", "#FF4D4D", "#FFF3E0", "#8B5A2B") },
 	{ Index = 3, Id = "CactusCanyon", Name = "Cactus Canyon", Cost = 250_000, Palette = p("#E8B86D", "#3FA34D", "#D9643A", "#A0522D") },
@@ -41,10 +46,20 @@ local list: { Biome } = {
 	{ Index = 13, Id = "AncientWilds", Name = "Ancient Wilds", Cost = 160_000_000, Palette = p("#8F9779", "#D4A373", "#6A994E", "#5C4033") },
 	{ Index = 14, Id = "CosmicGarden", Name = "Cosmic Garden", Cost = 200_000_000, Palette = p("#1B1035", "#FFD6FF", "#4CC9F0", "#7209B7") },
 	{ Index = 15, Id = "ForbiddenBloom", Name = "Forbidden Bloom", Cost = 250_000_000, Palette = p("#2B0A12", "#FF1E56", "#FFD700", "#5E0B15") },
+} :: any)
+
+local DIG_STYLE: { [string]: DigStyle } = {
+	GreenMeadows = "Mound", MushroomForest = "Mound", CactusCanyon = "Rock", InfernoJungle = "Rock",
+	FrostbiteGarden = "Glow", EnchantedGrove = "Glow", TropicalParadise = "Mound", CoralKingdom = "Rock",
+	AutumnWoods = "Mound", SkyIslands = "Glow", CrystalCaverns = "Glow", ToxicSwamp = "Mound",
+	AncientWilds = "Rock", CosmicGarden = "Glow", ForbiddenBloom = "Glow",
 }
 
 local byId: { [string]: Biome } = {}
 for _, b in list do
+	b.Released = true
+	b.DigStyle = DIG_STYLE[b.Id] or "Mound"
+	b.ToughTier = if b.Index <= 5 then 2 elseif b.Index <= 10 then 3 else 4
 	byId[b.Id] = b
 end
 

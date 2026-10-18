@@ -13,6 +13,8 @@ local list: { RemoteDef } = {
 	{ Name = "StateSync", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "DayNight", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "Notify", Kind = "Event", Rate = 0, Burst = 0 },
+	{ Name = "DigResult", Kind = "Event", Rate = 0, Burst = 0 },
+	{ Name = "Danger", Kind = "Event", Rate = 0, Burst = 0 },
 	-- client -> server
 	{ Name = "RequestState", Kind = "Event", Rate = 1, Burst = 3 },
 	{ Name = "PlantSeed", Kind = "Event", Rate = 5, Burst = 8 },
@@ -20,8 +22,9 @@ local list: { RemoteDef } = {
 	{ Name = "RemovePlant", Kind = "Event", Rate = 4, Burst = 6 },
 	{ Name = "BuyLane", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "BuyHouse", Kind = "Event", Rate = 1, Burst = 2 },
-	{ Name = "UnlockBiome", Kind = "Event", Rate = 1, Burst = 2 }, -- P3
-	{ Name = "Dig", Kind = "Event", Rate = 4, Burst = 6 }, -- P3
+	{ Name = "UnlockBiome", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "BuyShovel", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "Dig", Kind = "Event", Rate = 4, Burst = 6 },
 	{ Name = "FusionStart", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
 	{ Name = "FusionClaim", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
 }

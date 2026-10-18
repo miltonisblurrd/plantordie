@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 2,
+		SchemaVersion = 3,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -27,8 +27,46 @@ local Config = {
 		GateRingRadius = 118,
 		PlotRingRadius = 300,
 		PlotCount = 8,
-		BiomeAnchorRadius = 1400,
 		GroundY = 0,
+	},
+
+	-- Biome areas sit on an outer ring, two per gap between plots, each a square region whose
+	-- -Z side (the entrance) faces the hub. Baseplate covers out to BiomeRingRadius + Size/2.
+	Biome = {
+		RingRadius = 760,
+		Size = 240,
+		SafeRadius = 18, -- safe zone circle just inside the entrance
+		DigSpots = 10,
+		ToughSpots = 3,
+		EnforceSeconds = 0.5, -- locked-region check interval
+		PathWidth = 10,
+	},
+
+	Dig = {
+		Range = 12, -- studs from character to spot
+		RespawnSeconds = 45,
+		MaxLuck = 0.5,
+	},
+
+	Bank = {
+		HubRadius = 26, -- fountain bank point; your own plot also banks
+		CheckSeconds = 0.5,
+	},
+
+	Guardian = {
+		TickSeconds = 0.1,
+		StuckSeconds = 3, -- no progress toward the target for this long -> give up, patrol
+		StuckMinProgress = 1.5,
+		CooldownSeconds = 3, -- idle after a catch or a loss
+		HipHeight = 3,
+		DangerZoneCount = 2,
+		DangerZoneRadius = 22,
+	},
+
+	Sounds = {
+		-- Built-in Roblox client sounds (always available, no moderation risk).
+		GuardianAlert = "rbxasset://sounds/electronicpingshort.wav",
+		DigFind = "rbxasset://sounds/button.wav",
 	},
 
 	Plot = {
