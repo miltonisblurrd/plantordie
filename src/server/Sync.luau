@@ -16,7 +16,7 @@ local Biomes = require(script.Parent.Biomes)
 
 local Sync = {}
 
-type Runtime = { area: string, houseHp: number }
+type Runtime = { area: string, areaBiome: string, houseHp: number }
 local runtime: { [Player]: Runtime } = {}
 
 -- Income/sec is owned by Garden (P2). Until then it is always 0.
@@ -28,32 +28,32 @@ function Sync.setIncomeProvider(fn: (Player) -> number)
 	incomeProvider = fn
 end
 
-local function areaFor(player: Player): string
-	local character = player.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+-- Returns the HUD area name and the biome id ("" outside biomes).
+local function areaFor(player: Player): (string, string)
+	local root = Biomes.rootOf(player)
 	if not root then
-		return "Hub"
+		return "Hub", ""
 	end
 	local pos = root.Position
 	local idx = Plots.plotAt(pos)
 	if idx then
 		if Plots.isOwner(player, idx) then
-			return "Your Plot"
+			return "Your Plot", ""
 		end
 		local owner = Plots.ownerOf(idx)
-		return if owner then `{owner.Name}'s Plot` else "Empty Plot"
+		return if owner then `{owner.Name}'s Plot` else "Empty Plot", ""
 	end
 	local flat = Vector3.new(pos.X, 0, pos.Z)
 	if flat.Magnitude <= Config.World.GateRingRadius + 20 then
-		return "Hub"
+		return "Hub", ""
 	end
-	for _, b in BiomeData.List do
-		local anchor = Biomes.anchor(b.Id)
-		if anchor and (anchor.Position - pos).Magnitude < 300 then
-			return b.Name
-		end
+	local biomeId = Biomes.regionOf(pos)
+	if biomeId then
+		local b = BiomeData.ById[biomeId]
+		local safe = Biomes.inSafeZone(biomeId, pos)
+		return if safe then `{b.Name} (Safe)` else b.Name, biomeId
 	end
-	return "Hub"
+	return "Trail", ""
 end
 
 function Sync.resetHouseHp(player: Player)
@@ -93,6 +93,9 @@ function Sync.push(player: Player)
 		biomesUnlocked = d.biomesUnlocked,
 		plotIndex = Plots.plotOf(player) or 0,
 		area = rt.area,
+		areaBiome = rt.areaBiome,
+		shovelTier = d.shovelTier,
+		bag = d.expedition,
 		event = if event then { name = event.Name, endsAt = event.EndsAt } else nil,
 		persistent = Data.mode() == "DataStore",
 	})
@@ -101,7 +104,7 @@ end
 function Sync.start()
 	Data.onLoaded(function(player, session)
 		local house = Houses.List[session.data.houseTier] or Houses.List[1]
-		runtime[player] = { area = "Hub", houseHp = house.MaxHp }
+		runtime[player] = { area = "Hub", areaBiome = "", houseHp = house.MaxHp }
 		-- Plot assignment runs in its own onLoaded callback; let it settle first.
 		task.defer(Sync.push, player)
 	end)
@@ -119,9 +122,10 @@ function Sync.start()
 		while true do
 			task.wait(Config.Sync.AreaCheckSeconds)
 			for player, rt in runtime do
-				local area = areaFor(player)
+				local area, biomeId = areaFor(player)
 				if area ~= rt.area then
 					rt.area = area
+					rt.areaBiome = biomeId
 					Sync.push(player)
 				end
 			end
