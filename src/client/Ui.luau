@@ -86,6 +86,46 @@ function Ui.list(parent: Instance, direction: Enum.FillDirection, padPx: number)
 	return l
 end
 
+local confirmGui: ScreenGui? = nil
+
+-- Modal confirm. `body` must state the exact benefit and price (brand.md).
+function Ui.confirm(title: string, body: string, yesText: string, onYes: () -> ())
+	local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	if confirmGui then
+		confirmGui:Destroy()
+	end
+	local gui = Ui.screen("Confirm", playerGui, 20)
+	confirmGui = gui
+	local panel = Ui.panel("Dialog", UDim2.fromOffset(380, 210), gui)
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	local t = Ui.label("Title", title, true, panel)
+	t.Size = UDim2.new(1, -24, 0, 40)
+	t.Position = UDim2.fromOffset(12, 10)
+	local b = Ui.label("Body", body, false, panel)
+	b.Size = UDim2.new(1, -24, 0, 90)
+	b.Position = UDim2.fromOffset(12, 54)
+	b.TextWrapped = true
+	local close = function()
+		gui:Destroy()
+		if confirmGui == gui then
+			confirmGui = nil
+		end
+	end
+	local yes = Ui.button("Yes", yesText, panel)
+	yes.Size = UDim2.new(0.5, -18, 0, Ui.MinTouch + 4)
+	yes.Position = UDim2.new(0, 12, 1, -(Ui.MinTouch + 16))
+	yes.Activated:Connect(function()
+		close()
+		onYes()
+	end)
+	local no = Ui.button("No", "Cancel", panel)
+	no.BackgroundColor3 = Color3.fromRGB(90, 90, 96)
+	no.Size = UDim2.new(0.5, -18, 0, Ui.MinTouch + 4)
+	no.Position = UDim2.new(0.5, 6, 1, -(Ui.MinTouch + 16))
+	no.Activated:Connect(close)
+end
+
 -- ScreenGui with safe-area insets and a UIScale that tracks the viewport (phones ~0.7, desktop 1).
 function Ui.screen(name: string, playerGui: Instance, displayOrder: number?): ScreenGui
 	local gui = Instance.new("ScreenGui")

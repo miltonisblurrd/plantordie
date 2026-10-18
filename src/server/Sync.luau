@@ -56,6 +56,15 @@ local function areaFor(player: Player): string
 	return "Hub"
 end
 
+function Sync.resetHouseHp(player: Player)
+	local session = Data.get(player)
+	local rt = runtime[player]
+	if session and rt then
+		rt.houseHp = (Houses.List[session.data.houseTier] or Houses.List[1]).MaxHp
+		Sync.push(player)
+	end
+end
+
 function Sync.push(player: Player)
 	local session = Data.get(player)
 	local rt = runtime[player]
@@ -65,6 +74,10 @@ function Sync.push(player: Player)
 	local d = session.data
 	local house = Houses.List[d.houseTier] or Houses.List[1]
 	local event = Events.active(os.time())
+	local planted = 0
+	for _ in d.planted do
+		planted += 1
+	end
 	Net.fire("StateSync", player, {
 		money = d.money,
 		incomePerSec = incomeProvider(player),
@@ -72,6 +85,10 @@ function Sync.push(player: Player)
 		houseName = house.Name,
 		houseHp = rt.houseHp,
 		houseMaxHp = house.MaxHp,
+		houseSlots = house.Slots,
+		plantedCount = planted,
+		seeds = d.seeds,
+		plants = d.plants,
 		lanesUnlocked = d.lanesUnlocked,
 		biomesUnlocked = d.biomesUnlocked,
 		plotIndex = Plots.plotOf(player) or 0,

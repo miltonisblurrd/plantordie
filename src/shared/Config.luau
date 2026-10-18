@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 1,
+		SchemaVersion = 2,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -40,6 +40,18 @@ local Config = {
 		GardenOriginX = -42, -- local X of column 1's left edge
 		HouseX = -66, -- local X of house centre
 		ZombieSpawnX = 70,
+	},
+
+	Garden = {
+		TickSeconds = 1,
+		MaxPlantDistance = 60, -- studs from character to tile
+		OfflineCapHours = 4,
+		OfflineRate = 0.5, -- fraction of live income paid while offline
+		BoostGrowthMultiplier = 2,
+		-- Removing a plant: grown plants go to the plant inventory (keeps size/variant for fusion);
+		-- unripe plants are destroyed and refund this many seeds (0 = none).
+		UnripeSeedRefund = 0,
+		StarterSeeds = { Sunpetal = 5, PeaPopper = 3, Thornwall = 1 } :: { [string]: number },
 	},
 
 	DayNight = {

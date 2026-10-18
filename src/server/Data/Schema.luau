@@ -13,6 +13,7 @@ export type PlantedTile = {
 	size: string,
 	variant: string, -- "Normal" | "Neon" | "Mega"
 	plantedAt: number, -- os.time() on server
+	matured: boolean?, -- placed back from inventory already grown
 }
 
 export type PlantItem = {
@@ -39,7 +40,7 @@ export type Profile = {
 	houseTier: number,
 	lanesUnlocked: number,
 	biomesUnlocked: { [string]: boolean },
-	seeds: { [string]: number }, -- "species|rarity|size" -> count
+	seeds: { [string]: number }, -- species id -> count
 	plants: { [string]: PlantItem }, -- inventory of grown/fused plants by item id
 	nextItemId: number,
 	planted: { [string]: PlantedTile }, -- tile key "lane_col" -> plant
@@ -53,6 +54,8 @@ export type Profile = {
 		quests: { [string]: number },
 	},
 	growthBoostEndsAt: number,
+	lastSeen: number, -- os.time() of the last successful save; drives offline earnings
+	starterGranted: boolean,
 	receiptLedger: { order: { string }, seen: { [string]: boolean } },
 	stats: {
 		firstJoin: number,
@@ -93,6 +96,8 @@ function Schema.default(): Profile
 		collection = {},
 		event = { currency = {}, inventory = {}, quests = {} },
 		growthBoostEndsAt = 0,
+		lastSeen = 0,
+		starterGranted = false,
 		receiptLedger = { order = {}, seen = {} },
 		stats = {
 			firstJoin = now,
@@ -126,6 +131,21 @@ local migrations: { [number]: (any) -> any } = {
 	[0] = function(d)
 		-- Unversioned record: keep any fields we recognise, defaults fill the rest.
 		d.version = 1
+		return d
+	end,
+	[1] = function(d)
+		-- v1 keyed seeds by "species|rarity|size"; v2 stacks by species.
+		local seeds = {}
+		if type(d.seeds) == "table" then
+			for key, count in d.seeds do
+				if type(key) == "string" and type(count) == "number" then
+					local species = string.match(key, "^[^|]+") or key
+					seeds[species] = (seeds[species] or 0) + count
+				end
+			end
+		end
+		d.seeds = seeds
+		d.version = 2
 		return d
 	end,
 }

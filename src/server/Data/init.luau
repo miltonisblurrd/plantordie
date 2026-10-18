@@ -134,6 +134,7 @@ function Data.save(session: Session, release: boolean?): boolean
 	session.saving = true
 	local now = os.time()
 	session.data.stats.playSeconds += now - session.joinedAt
+	session.data.lastSeen = now
 	session.joinedAt = now
 	local written = false
 	for attempt = 1, Config.Data.Retries do

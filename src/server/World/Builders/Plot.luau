@@ -26,6 +26,7 @@ export type PlotRefs = {
 	model: Model,
 	tiles: { [string]: BasePart },
 	laneLocks: { [number]: Model },
+	plants: Folder,
 	houseBase: CFrame,
 	house: Model,
 	ownerLabel: TextLabel,
@@ -80,6 +81,18 @@ local function buildLaneLock(refs: PlotRefs, lane: number)
 	-- Front faces the hub side (where the plot camera sits); back for players inside the garden.
 	Parts.surfaceText(board, Enum.NormalId.Front, text, Color3.fromRGB(255, 220, 120))
 	Parts.surfaceText(board, Enum.NormalId.Back, text, Color3.fromRGB(255, 220, 120))
+	-- Opens the client's confirm dialog; the purchase itself goes through the BuyLane remote.
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "BuyLanePrompt"
+	prompt.ActionText = `Unlock lane {lane}`
+	prompt.ObjectText = Format.money(price)
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Style = Enum.ProximityPromptStyle.Default
+	prompt:SetAttribute("Lane", lane)
+	prompt.Parent = board
+	board:SetAttribute("Lane", lane)
 	refs.laneLocks[lane] = m
 end
 
@@ -134,6 +147,7 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		model = model,
 		tiles = {},
 		laneLocks = {},
+		plants = nil :: any,
 		houseBase = cf * CFrame.new(P.HouseX, 0, 0),
 		house = nil :: any,
 		ownerLabel = nil :: any,
@@ -158,6 +172,11 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 			refs.tiles[key] = tile
 		end
 	end
+
+	local plantFolder = Instance.new("Folder")
+	plantFolder.Name = "Plants"
+	plantFolder.Parent = model
+	refs.plants = plantFolder
 
 	refs.house = House.build(1, refs.houseBase, model)
 

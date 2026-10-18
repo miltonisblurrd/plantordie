@@ -15,9 +15,11 @@ local list: { RemoteDef } = {
 	{ Name = "Notify", Kind = "Event", Rate = 0, Burst = 0 },
 	-- client -> server
 	{ Name = "RequestState", Kind = "Event", Rate = 1, Burst = 3 },
-	{ Name = "PlantSeed", Kind = "Event", Rate = 5, Burst = 8 }, -- P2
-	{ Name = "BuyLane", Kind = "Event", Rate = 1, Burst = 2 }, -- P2
-	{ Name = "BuyHouse", Kind = "Event", Rate = 1, Burst = 2 }, -- P2
+	{ Name = "PlantSeed", Kind = "Event", Rate = 5, Burst = 8 },
+	{ Name = "PlacePlant", Kind = "Event", Rate = 5, Burst = 8 },
+	{ Name = "RemovePlant", Kind = "Event", Rate = 4, Burst = 6 },
+	{ Name = "BuyLane", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "BuyHouse", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "UnlockBiome", Kind = "Event", Rate = 1, Burst = 2 }, -- P3
 	{ Name = "Dig", Kind = "Event", Rate = 4, Burst = 6 }, -- P3
 	{ Name = "FusionStart", Kind = "Event", Rate = 1, Burst = 2 }, -- P5

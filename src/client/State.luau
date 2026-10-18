@@ -10,6 +10,10 @@ export type Snapshot = {
 	houseName: string,
 	houseHp: number,
 	houseMaxHp: number,
+	houseSlots: number,
+	plantedCount: number,
+	seeds: { [string]: number },
+	plants: { [string]: { id: string, species: string, rarity: string, size: string, variant: string } },
 	lanesUnlocked: number,
 	biomesUnlocked: { [string]: boolean },
 	plotIndex: number,
@@ -21,6 +25,10 @@ export type Snapshot = {
 export type DayNightInfo = { phase: string, endsAt: number, duration: number, night: number }
 
 local State = {}
+function State.remote(name: string): RemoteEvent
+	local folder = ReplicatedStorage:WaitForChild("Remotes")
+	return folder:WaitForChild(name) :: RemoteEvent
+end
 State.snapshot = nil :: Snapshot?
 State.dayNight = nil :: DayNightInfo?
 

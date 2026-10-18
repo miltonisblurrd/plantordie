@@ -17,6 +17,18 @@ local refsByIndex: { [number]: PlotBuilder.PlotRefs } = {}
 local ownerByIndex: { [number]: Player } = {}
 local indexByPlayer: { [Player]: number } = {}
 local charConns: { [Player]: RBXScriptConnection } = {}
+local assignedCallbacks: { (Player, number) -> () } = {}
+local releasedCallbacks: { (Player, number) -> () } = {}
+
+-- Fires after a plot is assigned and its saved lanes/house are applied.
+function Plots.onAssigned(cb: (Player, number) -> ())
+	table.insert(assignedCallbacks, cb)
+end
+
+-- Fires before a plot's visuals are reset on release.
+function Plots.onReleased(cb: (Player, number) -> ())
+	table.insert(releasedCallbacks, cb)
+end
 
 local function resolveIndex(plot: number | Instance): number?
 	if type(plot) == "number" then
@@ -125,6 +137,9 @@ local function assign(player: Player, session: Data.Session)
 	if player.Character then
 		task.spawn(teleportHome, player, player.Character)
 	end
+	for _, cb in assignedCallbacks do
+		task.spawn(cb, player, free)
+	end
 end
 
 local function release(player: Player)
@@ -139,6 +154,9 @@ local function release(player: Player)
 	indexByPlayer[player] = nil
 	if ownerByIndex[idx] == player then
 		ownerByIndex[idx] = nil
+	end
+	for _, cb in releasedCallbacks do
+		pcall(cb, player, idx)
 	end
 	local refs = refsByIndex[idx]
 	refs.model:SetAttribute("OwnerUserId", nil)
