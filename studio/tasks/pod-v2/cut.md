@@ -56,6 +56,32 @@ Checks: A24 mobile, plus a re-walk of A1–A25.
 
 A1–A25 are the 25 bullets in spec §18, in order. Under this QA mode, each row is marked PASS (code path verified and static checks clean), FAIL, or BLOCKED-RUNTIME (needs a Studio playtest by the owner).
 
+- A1 A new player joins and receives a unique plot.
+- A2 The player plants a seed in a valid grid tile.
+- A3 The plant grows and generates the correct money per second.
+- A4 A larger plant generates more income than a smaller version of the same species.
+- A5 The player purchases an additional lane and retains it after rejoining.
+- A6 The player digs for a seed in a biome and receives a valid reward.
+- A7 The player cannot enter an unreleased or locked biome.
+- A8 The player purchases a biome and retains permanent access.
+- A9 A guardian detects, chases, and loses the player correctly.
+- A10 A caught player loses only the specified unbanked seeds.
+- A11 Zombies enter the correct lanes and attack the correct player's garden.
+- A12 Defensive plants damage zombies correctly.
+- A13 A zombie reaching the house damages its defenses.
+- A14 Four identical normal plants can be fused into one Neon plant.
+- A15 Four identical Neon plants can be fused into one Mega plant.
+- A16 Growth and fusion progress correctly while the player is offline.
+- A17 A completed fusion cannot be claimed twice.
+- A18 Failed or cancelled purchases do not grant unauthorized rewards.
+- A19 Verified Developer Product receipts grant the correct reward exactly once.
+- A20 Halloween plants remain in player inventories after the event ends.
+- A21 Two players can play simultaneously without affecting each other's plots or inventories.
+- A22 Players cannot duplicate seeds, money, or plants through client requests.
+- A23 All 15 biomes are implemented and reachable through progression.
+- A24 The game remains playable using mobile controls.
+- A25 The server handles save failures and player disconnects without intentionally wiping player progress.
+
 ## Out of scope for cut v1
 
 - Uploaded meshes, custom animations uploaded to Roblox, and custom audio.
