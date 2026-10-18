@@ -21,9 +21,29 @@ local G = Config.Garden
 
 local Garden = {}
 
-type View = { models: { [string]: Model }, stages: { [string]: number }, income: number }
+-- `wilted` is night-only state from Defense: a wilted plant keeps its record but earns nothing
+-- until dawn or a repair. It is not saved, so a rejoin also recovers it.
+type View = { models: { [string]: Model }, stages: { [string]: number }, wilted: { [string]: boolean? }, income: number }
 local views: { [Player]: View } = {}
 local rng = Random.new()
+local changedCallbacks: { (Player, string) -> () } = {}
+local WILT_COLOR = Color3.fromRGB(96, 74, 52)
+
+-- Fires after a tile's plant appears, changes stage, or is removed.
+function Garden.onPlantChanged(cb: (Player, string) -> ())
+	table.insert(changedCallbacks, cb)
+end
+
+local function tintWilted(m: Model)
+	for _, d in m:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Color = d.Color:Lerp(WILT_COLOR, 0.75)
+			d.Material = Enum.Material.SmoothPlastic
+		elseif d:IsA("Light") or d:IsA("ParticleEmitter") or d:IsA("Sparkles") then
+			d:Destroy()
+		end
+	end
+end
 
 function Garden.incomeOf(player: Player): number
 	local v = views[player]
@@ -32,6 +52,15 @@ end
 
 local function growthMult(profile: Data.Profile): number
 	return Economy.growthMultiplier(profile, os.time())
+end
+
+function Garden.isGrown(player: Player, key: string): boolean
+	local session = Data.get(player)
+	if not session then
+		return false
+	end
+	local rec = session.data.planted[key]
+	return rec ~= nil and Economy.isGrown(rec, os.time(), growthMult(session.data))
 end
 
 local function setTileOccupied(refs: PlotBuilder.PlotRefs, key: string, occupied: boolean)
@@ -57,7 +86,11 @@ local function render(player: Player, key: string)
 	end
 	local rec = session.data.planted[key]
 	if not rec then
+		v.wilted[key] = nil
 		setTileOccupied(refs, key, false)
+		for _, cb in changedCallbacks do
+			task.spawn(cb, player, key)
+		end
 		return
 	end
 	local tile = refs.tiles[key]
@@ -82,7 +115,42 @@ local function render(player: Player, key: string)
 	m:SetAttribute("Stage", stage)
 	v.models[key] = m
 	v.stages[key] = stage
+	if v.wilted[key] then
+		m:SetAttribute("Wilted", true)
+		tintWilted(m)
+	end
 	setTileOccupied(refs, key, true)
+	for _, cb in changedCallbacks do
+		task.spawn(cb, player, key)
+	end
+end
+
+function Garden.setWilted(player: Player, key: string, on: boolean)
+	local v = views[player]
+	if not v or (v.wilted[key] == true) == on then
+		return
+	end
+	v.wilted[key] = if on then true else nil
+	if on then
+		local m = v.models[key]
+		if m then
+			m:SetAttribute("Wilted", true)
+			tintWilted(m)
+		end
+	else
+		render(player, key)
+	end
+end
+
+function Garden.wiltedKeys(player: Player): { string }
+	local v = views[player]
+	local out = {}
+	if v then
+		for key in v.wilted do
+			table.insert(out, key)
+		end
+	end
+	return out
 end
 
 local function clearViews(player: Player, idx: number)
@@ -107,7 +175,7 @@ local function restore(player: Player)
 	if not session then
 		return
 	end
-	views[player] = { models = {}, stages = {}, income = 0 }
+	views[player] = { models = {}, stages = {}, wilted = {}, income = 0 }
 	for key in session.data.planted do
 		render(player, key)
 	end
@@ -333,7 +401,7 @@ local function tick()
 						m:SetAttribute("GrowSeconds", secs)
 					end
 				end
-				if stage == 4 then
+				if stage == 4 and not v.wilted[key] then
 					total += Economy.incomeOf(rec)
 				end
 			end

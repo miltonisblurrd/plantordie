@@ -15,6 +15,7 @@ local list: { RemoteDef } = {
 	{ Name = "Notify", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "DigResult", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "Danger", Kind = "Event", Rate = 0, Burst = 0 },
+	{ Name = "CombatFx", Kind = "Event", Rate = 0, Burst = 0 },
 	-- client -> server
 	{ Name = "RequestState", Kind = "Event", Rate = 1, Burst = 3 },
 	{ Name = "PlantSeed", Kind = "Event", Rate = 5, Burst = 8 },
@@ -25,6 +26,9 @@ local list: { RemoteDef } = {
 	{ Name = "UnlockBiome", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "BuyShovel", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "Dig", Kind = "Event", Rate = 4, Burst = 6 },
+	{ Name = "Repair", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "UseTrap", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "HitZombie", Kind = "Event", Rate = 5, Burst = 8 },
 	{ Name = "FusionStart", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
 	{ Name = "FusionClaim", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
 }

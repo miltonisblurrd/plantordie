@@ -24,6 +24,7 @@ export type Combat = {
 	Range: number, -- tiles along the lane
 	Ability: string?,
 	WallHp: number?,
+	Hp: number, -- night HP before it wilts
 }
 
 export type Plant = {
@@ -65,15 +66,15 @@ local RARITY_GROW: { [string]: number } =
 	{ Common = 1, Uncommon = 1.4, Rare = 2, Epic = 3, Legendary = 4.5, Mythical = 6, Divine = 9 }
 
 type CombatRole = "Projectile" | "Rapid" | "AoE" | "Slow" | "Burn" | "Wall" | "Income"
--- Damage per hit at biome 1; scales +60% per biome index for Phase 4.
-local ROLE_STATS: { [string]: { Damage: number, AttackRate: number, Range: number, WallHp: number? } } = {
-	Projectile = { Damage = 5, AttackRate = 1, Range = 9 },
-	Rapid = { Damage = 2, AttackRate = 3, Range = 7 },
-	AoE = { Damage = 8, AttackRate = 0.5, Range = 2 },
-	Slow = { Damage = 2, AttackRate = 1, Range = 6 },
-	Burn = { Damage = 3, AttackRate = 0.8, Range = 6 },
-	Wall = { Damage = 1, AttackRate = 0.5, Range = 0, WallHp = 120 },
-	Income = { Damage = 0, AttackRate = 0, Range = 0 },
+-- Damage per hit and HP at biome 1; both scale +60% per biome index, as zombie HP does.
+local ROLE_STATS: { [string]: { Damage: number, AttackRate: number, Range: number, Hp: number, WallHp: number? } } = {
+	Projectile = { Damage = 5, AttackRate = 1, Range = 9, Hp = 40 },
+	Rapid = { Damage = 2, AttackRate = 3, Range = 7, Hp = 35 },
+	AoE = { Damage = 8, AttackRate = 0.5, Range = 2, Hp = 45 },
+	Slow = { Damage = 2, AttackRate = 1, Range = 6, Hp = 40 },
+	Burn = { Damage = 3, AttackRate = 0.8, Range = 6, Hp = 40 },
+	Wall = { Damage = 1, AttackRate = 0.5, Range = 0, Hp = 120, WallHp = 120 },
+	Income = { Damage = 0, AttackRate = 0, Range = 0, Hp = 30 },
 }
 
 type Spec = {
@@ -284,6 +285,7 @@ for biomeIndex, biome in Biomes.List do
 				Range = role.Range,
 				Ability = s.ability,
 				WallHp = if role.WallHp then math.floor(role.WallHp * scale) else nil,
+				Hp = math.floor(role.Hp * scale),
 			},
 		})
 	end

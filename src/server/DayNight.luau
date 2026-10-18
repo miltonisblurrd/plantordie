@@ -25,6 +25,10 @@ function DayNight.phase(): Phase
 	return phase
 end
 
+function DayNight.endsAt(): number
+	return endsAt
+end
+
 function DayNight.nightNumber(): number
 	return night
 end

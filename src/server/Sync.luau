@@ -28,6 +28,28 @@ function Sync.setIncomeProvider(fn: (Player) -> number)
 	incomeProvider = fn
 end
 
+-- Night wave HUD block, owned by Defense (P4).
+local defenseProvider: (Player) -> { [string]: any }? = function(_player: Player)
+	return nil
+end
+
+function Sync.setDefenseProvider(fn: (Player) -> { [string]: any }?)
+	defenseProvider = fn
+end
+
+function Sync.houseHp(player: Player): number
+	local rt = runtime[player]
+	return if rt then rt.houseHp else 0
+end
+
+function Sync.setHouseHp(player: Player, hp: number)
+	local rt = runtime[player]
+	if rt then
+		rt.houseHp = math.max(0, hp)
+		Sync.push(player)
+	end
+end
+
 -- Returns the HUD area name and the biome id ("" outside biomes).
 local function areaFor(player: Player): (string, string)
 	local root = Biomes.rootOf(player)
@@ -96,6 +118,7 @@ function Sync.push(player: Player)
 		areaBiome = rt.areaBiome,
 		shovelTier = d.shovelTier,
 		bag = d.expedition,
+		defense = defenseProvider(player),
 		event = if event then { name = event.Name, endsAt = event.EndsAt } else nil,
 		persistent = Data.mode() == "DataStore",
 	})

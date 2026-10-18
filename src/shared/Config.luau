@@ -103,6 +103,51 @@ local Config = {
 	Sync = {
 		AreaCheckSeconds = 0.5,
 	},
+
+	-- Night waves (P4). Money amounts are "income seconds" (x the player's income/sec) with a floor,
+	-- so rewards, costs and penalties stay proportional at every stage of the game.
+	Defense = {
+		TickSeconds = 0.1,
+		WarningSeconds = 30, -- incoming-attack banner and toast before night
+		MaxPerPlot = 18, -- alive at once on one plot
+		MaxPerServer = 100, -- alive at once on the server
+		SpawnWindow = 0.7, -- a wave spawns over this fraction of the night
+		MaxLifeSeconds = 100, -- timeout cleanup
+		StuckSeconds = 8, -- no progress while not attacking -> despawn
+		MeleeReach = 5, -- studs between zombie and plant to start chewing
+		HouseHitMultiplier = 3, -- a zombie reaching the house hits once for Damage x this, then leaves
+		LaneSpawnJitter = 4, -- studs of random extra spawn distance so zombies don't stack
+		-- Wave size per unlocked lane, so players with fewer lanes face the same density.
+		PerLaneBase = 1.5,
+		PerLaneGrowth = 0.25, -- per night
+		PerLaneNightCap = 12, -- nights after which growth stops
+		WaveCap = 40,
+		-- Stat scaling by the player's highest unlocked biome (k) and night number (n).
+		HpPerBiome = 0.6, -- x(1 + 0.6(k-1)), matching plant damage scaling
+		DamagePerBiome = 0.5,
+		HpPerNight = 0.04,
+		NightScaleCap = 20,
+		-- Rewards, granted once at dawn only if the house survived.
+		SurviveBonusIncomeSeconds = 30,
+		SurviveBonusMin = 50,
+		BountyIncomeSeconds = 1, -- x each type's Bounty
+		BountyMin = 5,
+		-- Loss: the wave reward is forfeited and a small capped penalty applies. Plants are never lost.
+		LossPenaltyFraction = 0.05, -- of current money
+		LossPenaltyIncomeSeconds = 120, -- cap
+		-- Player actions.
+		RepairCooldown = 20,
+		RepairIncomeSeconds = 15, -- cost of a full house repair
+		RepairMin = 25,
+		RepairPlantIncomeSeconds = 3, -- per wilted plant revived by the same repair
+		AssistRange = 45,
+		AssistDamageFraction = 0.05, -- of the zombie's max HP per click
+		AssistMinDamage = 2,
+		Traps = {
+			Spikes = { Cooldown = 30, Seconds = 15, Dps = 6, HalfWidth = 3, CostIncomeSeconds = 5, CostMin = 20 },
+			Freeze = { Cooldown = 45, Seconds = 3, Radius = 14, Damage = 15, ArmSeconds = 20, CostIncomeSeconds = 8, CostMin = 30 },
+		} :: { [string]: { [string]: number } },
+	},
 }
 
 return Config

@@ -21,8 +21,23 @@ export type Snapshot = {
 	areaBiome: string, -- biome id, "" outside biomes
 	shovelTier: number,
 	bag: { [string]: number }, -- unbanked expedition seeds
+	defense: DefenseInfo?,
 	event: { name: string, endsAt: number }?,
 	persistent: boolean,
+}
+
+export type DefenseInfo = {
+	active: boolean,
+	night: number,
+	remaining: number,
+	total: number,
+	lost: boolean,
+	boss: boolean,
+	repairCost: number,
+	repairNeeded: boolean,
+	repairReadyAt: number,
+	wilted: number,
+	traps: { [string]: { readyAt: number, cost: number } },
 }
 
 export type DayNightInfo = { phase: string, endsAt: number, duration: number, night: number }
