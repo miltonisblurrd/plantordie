@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Format = require(game:GetService("ReplicatedStorage").Shared.Format)
+local Plants = require(game:GetService("ReplicatedStorage").Shared.Plants)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 
@@ -71,6 +72,20 @@ function Hud.start()
 	local eventText = Ui.label("Text", "", false, event)
 	eventText.TextColor3 = Ui.Warn
 
+	local bag = Ui.panel("Bag", UDim2.fromOffset(220, 64), right)
+	bag.LayoutOrder = 4
+	bag.Visible = false
+	padded(bag, 6)
+	local bagTitle = Ui.label("Title", "Bag: 0 seeds", false, bag)
+	bagTitle.Size = UDim2.new(1, 0, 0, 22)
+	bagTitle.TextColor3 = Ui.Warn
+	local bagHint = Ui.label("Hint", "", false, bag)
+	bagHint.Position = UDim2.fromOffset(0, 24)
+	bagHint.Size = UDim2.new(1, 0, 0, 28)
+	bagHint.TextWrapped = true
+	bagHint.TextSize = 12
+	bagHint.TextScaled = false
+
 	-- Bottom-left: house HP.
 	local house = Ui.panel("House", UDim2.fromOffset(260, 64), gui)
 	house.AnchorPoint = Vector2.new(0, 1)
@@ -107,6 +122,18 @@ function Hud.start()
 		fill.BackgroundColor3 = if frac > 0.5 then Ui.Primary elseif frac > 0.25 then Ui.Warn else Ui.Danger
 		hpText.Text = `{math.floor(s.houseHp)} / {s.houseMaxHp}`
 		event.Visible = s.event ~= nil
+		local total, kinds, top, topCount = 0, 0, "", 0
+		for species, c in s.bag do
+			total += c
+			kinds += 1
+			if c > topCount then
+				top, topCount = species, c
+			end
+		end
+		bag.Visible = total > 0
+		bagTitle.Text = `Bag: {total} unbanked seed{if total == 1 then "" else "s"}`
+		local topName = if Plants.ById[top] then Plants.ById[top].Name else top
+		bagHint.Text = `{topName} x{topCount}{if kinds > 1 then ` +{kinds - 1} more` else ""}. Bank at your plot or the fountain.`
 	end)
 
 	-- Countdown and event timer tick locally from server-provided end times.

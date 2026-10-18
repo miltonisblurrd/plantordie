@@ -18,6 +18,9 @@ export type Snapshot = {
 	biomesUnlocked: { [string]: boolean },
 	plotIndex: number,
 	area: string,
+	areaBiome: string, -- biome id, "" outside biomes
+	shovelTier: number,
+	bag: { [string]: number }, -- unbanked expedition seeds
 	event: { name: string, endsAt: number }?,
 	persistent: boolean,
 }

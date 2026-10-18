@@ -14,6 +14,9 @@ local Inspect = require(script.Parent.Inspect)
 local Inventory = require(script.Parent.Inventory)
 local Shops = require(script.Parent.Shops)
 local GardenView = require(script.Parent.GardenView)
+local Danger = require(script.Parent.Danger)
+local Shovel = require(script.Parent.Shovel)
+local Atmosphere = require(script.Parent.Atmosphere)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
 local bar = Instance.new("Frame")
@@ -21,7 +24,7 @@ bar.Name = "Bar"
 bar.BackgroundTransparency = 1
 bar.AnchorPoint = Vector2.new(0.5, 1)
 bar.Position = UDim2.new(0.5, 0, 1, -12)
-bar.Size = UDim2.fromOffset(260, 52)
+bar.Size = UDim2.fromOffset(380, 52)
 bar.Parent = barGui
 Ui.list(bar, Enum.FillDirection.Horizontal, 10).HorizontalAlignment = Enum.HorizontalAlignment.Center
 
@@ -35,4 +38,7 @@ Placement.setInspectHandler(Inspect.open)
 Inventory.start(bar)
 Shops.start(bar)
 GardenView.start()
+Danger.start()
+Shovel.start(bar)
+Atmosphere.start()
 State.start()
