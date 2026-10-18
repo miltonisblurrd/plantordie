@@ -10,7 +10,7 @@ Rojo project `PlantOrDie` (`default.project.json`, Rojo 7.7.1 via `rokit.toml`).
 | ServerScriptService.Server | `src/server` | Authority over every number |
 | StarterPlayerScripts.Client | `src/client` | Renders the state it receives |
 
-Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on branch `cursor/p1-foundation-cc3f`. The v1 prototype (roll/gems/quests) has been deleted.
+Phases 1 (Foundation), 2 (Planting), 3 (Exploration) and 4 (Defense) of cut v1 are built on branch `cursor/p1-foundation-cc3f`. The v1 prototype (roll/gems/quests) has been deleted.
 
 ## Shared (`src/shared`)
 
@@ -28,7 +28,9 @@ Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on b
 - `DropTables`: rarity weights per biome, exclusive to that biome. `weighted(biome, luck)` and `roll(biome, luck, r01)`. Luck is clamped by `Config.Dig.MaxLuck`.
 - `Upgrades`: 5 shovels (Rusty, Iron, Golden, Crystal, Void) with price, DigSeconds, LuckBonus and ToughTier
 - `Guardians`: 15 guardians (`List`, `ByBiome`) with shape, speeds, detect range, leash, catch range, path recompute interval and prediction
-- Stubs that later phases fill: `Zombies`, `Fusion`, `Events` (Halloween window and `active()`)
+- `Zombies`: 6 lane types plus the Rot King boss (every 5th night). `stats` scales by highest biome and night, `waveSize` scales by lanes, and `compose` builds a wave.
+- `Combat`: night stats for a planted record (role, damage, rate, range in studs, HP) from the `Plants` combat field, with size and variant power
+- Stubs that later phases fill: `Fusion`, `Events` (Halloween window and `active()`)
 
 ## Server (`src/server`)
 
@@ -44,12 +46,16 @@ Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on b
 - `Tools`: gives the Shovel tool on spawn
 - `GuardianAI`: one Heartbeat loop for every guardian (Patrol, Chase, Cooldown). Throttled off-thread PathfindingService with a direct-move fallback, a stuck reset, and loss on leash, safe zone or leaving the region. A catch clears the bag and sends the player home. Guardians in empty biomes sleep.
 - `DayNight`: the synced cycle. Broadcasts `(phase, endsAt, duration, night)` and moves `Lighting.ClockTime`. Provides an `onPhaseChanged` hook for P4.
+- `Garden` also provides `onPlantChanged`, `isGrown`, `setWilted` and `wiltedKeys`. Wilted plants earn nothing until dawn or a repair.
 - `Garden`: planting, placing and removing plants (`PlantSeed`, `PlacePlant`, `RemovePlant`), plant models rebuilt from `profile.planted`, the 1s income and stage tick, offline earnings, and the starter pack. `incomeOf` feeds Sync.
+- `Defense/Core`: the pure lane simulation for one plot (plain tables, no instances). Covers plant roles, zombie movement and attacks, jump, ranged, traps, the house hit, stuck and timeout cleanup, and dawn. The harness runs it directly.
+- `Defense` (init): one loop for every plot. It builds a wave at nightfall, spawns at the right edge of an unlocked lane, steps `Core`, mirrors the result onto anchored zombie models with PivotTo, and batches `CombatFx`. It also handles wilting, house HP, wave loss with its penalty, the dawn reward, the pre-night warning, and the `Repair`, `UseTrap` and `HitZombie` remotes. Spawning pauses while the owner is in a biome.
 - `Shop`: `BuyLane` (in order), `BuyHouse` (biome-gated), `UnlockBiome` (released, in order, saved), and `BuyShovel` (next tier)
-- `Sync`: sends the HUD snapshot (`StateSync`) and tracks each player's area. `setIncomeProvider` is the hook for P2 Garden.
+- `Sync`: sends the HUD snapshot (`StateSync`, which includes a `defense` block) and tracks each player's area. `houseHp` and `setHouseHp` serve Defense. `setIncomeProvider` is the hook for P2 Garden.
 - `World/Parts`: the part factory, plus tree, rock, and surface-text helpers
 - `World/Layout`: placement maths. Plots sit on a ring at 45° steps. Gates sit 2 per sector between plot paths. Biomes are 240×240 squares on ring radius 760, two per plot gap. Each trail has 5 points (`biomePath`).
 - `World/BiomeKit`: the shared biome skeleton (ground, walls, entrance, safe zone, patrol, danger zones, dig spots) and prop helpers. `World/Builders/Biomes/<Id>`: one builder per biome. `World/Builders/GuardianRig`: guardian models.
+- `World/Builders/ZombieModel`: a 5-7 part zombie with its pivot at the feet
 - `World/Builders/Hub`, `Gate` (with `UnlockBiomePrompt`), `Plot`, `House`, `PlantModel`: models built from parts. `PlantModel` builds per stage and variant: Neon gets a light and particles, Mega gets the `MegaPlant` tag and sparkles. Lane signs carry a `BuyLanePrompt`. `House.build(tier, …)` swaps the house model when the tier changes.
 
 ## Client (`src/client`)
@@ -64,6 +70,7 @@ Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on b
 - `Shovel`: tool hook, nearest spot, swing tween, `Dig` request, dig VFX, and the shovel shop panel
 - `Danger`: the guardian warning banner and sound
 - `Atmosphere`: a colour tint per biome
+- `Defense`: the attack countdown and wave banner, zombie health billboards, click or tap to hit, `CombatFx` effects, the Repair, Spikes and Freeze buttons, and the night tint
 - `Placement`: tile raycast with a green/red preview. Mouse: click to plant. Touch: tap to preview, tap again to plant. With nothing selected, a click opens Inspect.
 - `Inspect`: the plant popup (species, rarity colour, size, variant, timer, income, and a confirmed dig-up)
 - `Inventory`: the seeds and plants panel. Picking an entry selects it in Placement.
@@ -73,8 +80,8 @@ Phases 1 (Foundation), 2 (Planting) and 3 (Exploration) of cut v1 are built on b
 
 ## Remotes
 
-Server to client: `StateSync`, `DayNight`, `Notify`, `DigResult`, `Danger`.
-Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`. These are declared but not handled yet: `FusionStart`, `FusionClaim` (P5).
+Server to client: `StateSync`, `DayNight`, `Notify`, `DigResult`, `Danger`, `CombatFx`.
+Client to server: `RequestState`, `PlantSeed`, `PlacePlant`, `RemovePlant`, `BuyLane`, `BuyHouse`, `UnlockBiome`, `BuyShovel`, `Dig`, `Repair`, `UseTrap`, `HitZombie`. These are declared but not handled yet: `FusionStart`, `FusionClaim` (P5).
 
 ## Rules for later phases
 

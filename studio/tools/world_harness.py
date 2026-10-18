@@ -341,6 +341,194 @@ for i = 1, #Biomes.List - 1 do
 	lastPerPlant = perPlant
 end
 print(("Total ~%.0f min (~%.1f h) of income time, excluding growth, refills and house purchases"):format(total, total / 60))
+
+print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
+local Core = require(Server.Defense.Core)
+local Zombies = require(Shared.Zombies)
+local Combat = require(Shared.Combat)
+local D = Config.Defense
+local houseX = Config.Plot.HouseX + Houses.List[1].Size.X / 2
+
+-- Runs one wave on a field. `garden` maps tile key -> {species, size}. Returns a report.
+local function runWave(night, biome, lanes, garden, seed)
+	local r = Random.new(seed)
+	local f = Core.newField(houseX, 1 + D.HpPerBiome * (biome - 1))
+	for key, rec in garden do
+		local lane, col = key:match("^(%d)_(%d)$")
+		Core.setPlant(f, key, tonumber(lane), PlotBuilder.colX(tonumber(col)), Combat.plantStats(rec[1], rec[2], "Normal"))
+	end
+	local queue = Zombies.compose(night, biome, lanes, r)
+	local interval = Config.DayNight.NightSeconds * D.SpawnWindow / #queue
+	local rep = { total = #queue, spawned = 0, kills = 0, house = 0, houseHits = 0, wilts = 0, by = {}, laneOk = true, leftOnly = true, maxAlive = 0 }
+	local lastX = {}
+	local t, nextSpawn, id = 0, 3, 0
+	while t < Config.DayNight.NightSeconds do
+		if #queue > 0 and t >= nextSpawn and Core.alive(f) < D.MaxPerPlot then
+			nextSpawn = t + interval
+			id += 1
+			local kind = table.remove(queue, 1)
+			Core.addZombie(f, id, kind, r:NextInteger(1, lanes), Config.Plot.ZombieSpawnX + r:NextNumber() * D.LaneSpawnJitter, Zombies.stats(kind, biome, night), t)
+			rep.spawned += 1
+		end
+		local ev = {}
+		Core.step(f, 0.1, t, ev)
+		for _, e in ev do
+			if e.kind == "kill" then rep.kills += 1; rep.by[e.by] = (rep.by[e.by] or 0) + 1
+			elseif e.kind == "house" then rep.house += e.amount; rep.houseHits += 1
+			elseif e.kind == "wilt" then rep.wilts += 1 end
+		end
+		for zid, z in f.zombies do
+			if z.lane < 1 or z.lane > lanes then rep.laneOk = false end
+			if lastX[zid] and z.x > lastX[zid] + 1e-6 then rep.leftOnly = false end
+			lastX[zid] = z.x
+		end
+		rep.maxAlive = math.max(rep.maxAlive, Core.alive(f))
+		Core.sweep(f)
+		t += 0.1
+	end
+	local ev = {}
+	Core.dawn(f, ev)
+	rep.leftAtDawn = #ev
+	local wiltedAfter = 0
+	for _, p in f.plants do if p.wilted then wiltedAfter += 1 end end
+	rep.wiltedAfterDawn = wiltedAfter
+	return rep
+end
+
+local function show(name, rep)
+	local by = {}
+	for k, v in rep.by do table.insert(by, k .. "=" .. v) end
+	table.sort(by)
+	print(("%-34s spawned %2d/%2d  killed %2d (%s)  house hits %d (-%d HP)  wilted %d  max alive %d  lanes ok %s  left-only %s  despawned at dawn %d  wilted after dawn %d"):format(
+		name, rep.spawned, rep.total, rep.kills, table.concat(by, " "), rep.houseHits, math.floor(rep.house), rep.wilts, rep.maxAlive,
+		tostring(rep.laneOk), tostring(rep.leftOnly), rep.leftAtDawn, rep.wiltedAfterDawn))
+	assert(rep.laneOk and rep.leftOnly and rep.wiltedAfterDawn == 0 and rep.maxAlive <= D.MaxPerPlot)
+end
+
+local starter = { ["1_3"] = { "PeaPopper", "Medium" }, ["2_3"] = { "PeaPopper", "Medium" }, ["3_3"] = { "PeaPopper", "Medium" },
+	["2_6"] = { "Thornwall", "Medium" }, ["1_1"] = { "Sunpetal", "Small" } }
+show("Night 1, biome 1, 3 lanes, starter", runWave(1, 1, 3, starter, 7))
+show("Night 1, biome 1, 3 lanes, no plants", runWave(1, 1, 3, {}, 7))
+show("Night 5 (boss), biome 1, 3 lanes, starter", runWave(5, 1, 3, starter, 7))
+local mixed = {}
+for lane = 1, 5 do
+	mixed[lane .. "_2"] = { "Capshroom", "Medium" }
+	mixed[lane .. "_4"] = { "Sporelord", "Medium" }
+	mixed[lane .. "_5"] = { "Puffcap", "Medium" }
+	mixed[lane .. "_7"] = { "BarrelCactus", "Medium" }
+end
+show("Night 10, biome 3, 5 lanes, mixed roles", runWave(10, 3, 5, mixed, 11))
+
+print("\n-- Role checks: one plant at col 3 vs one Walker; 10 s --")
+local function duel(species, zLane, zX)
+	local f = Core.newField(houseX, 1)
+	Core.setPlant(f, "2_3", 2, PlotBuilder.colX(3), Combat.plantStats(species, "Medium", "Normal"))
+	local z = Core.addZombie(f, 1, "Walker", zLane, zX, Zombies.stats("Walker", 1, 1), 0)
+	z.speed = 0 -- hold position so range rules are what is tested
+	local ev, t, shots = {}, 0, 0
+	local maxHp = z.hp
+	while t < 10 do
+		Core.step(f, 0.1, t, ev)
+		t += 0.1
+	end
+	for _, e in ev do if e.kind == "shot" or e.kind == "splash" then shots += 1 end end
+	return maxHp - z.hp, shots, z
+end
+local px = PlotBuilder.colX(3)
+for _, case in {
+	{ "PeaPopper", 2, px + 30, "same lane, ahead, in range" },
+	{ "PeaPopper", 3, px + 30, "other lane" },
+	{ "PeaPopper", 2, px - 10, "behind the plant" },
+	{ "PeaPopper", 2, px + 80, "same lane, out of range" },
+	{ "SunspikeAgave", 2, px + 30, "rapid, same lane" },
+	{ "Capshroom", 3, px + 10, "AoE, adjacent lane" },
+	{ "Capshroom", 4, px + 10, "AoE, two lanes away" },
+	{ "Puffcap", 2, px + 20, "slow, same lane" },
+	{ "Sporelord", 2, px + 20, "burn, same lane" },
+	{ "Sunpetal", 2, px + 10, "income-only" },
+} do
+	local dealt, shots = duel(case[1], case[2], case[3])
+	print(("  %-14s %-28s damage %6.1f  attacks %d"):format(case[1], case[4], dealt, shots))
+end
+-- Slow and burn effects.
+do
+	local f = Core.newField(houseX, 1)
+	Core.setPlant(f, "2_3", 2, px, Combat.plantStats("Puffcap", "Medium", "Normal"))
+	local z = Core.addZombie(f, 1, "Tank", 2, px + 40, Zombies.stats("Tank", 1, 1), 0)
+	local ev = {}
+	Core.step(f, 0.1, 0, ev)
+	local x0 = z.x
+	Core.step(f, 1, 0.1, ev)
+	print(("  Slow: Tank moved %.2f studs in 1 s (base speed %.1f, slowed x%.1f)"):format(x0 - z.x, z.speed, Combat.SlowFactor))
+	local g = Core.newField(houseX, 1)
+	Core.setPlant(g, "2_3", 2, px, Combat.plantStats("Sporelord", "Medium", "Normal"))
+	local w = Core.addZombie(g, 1, "Tank", 2, px + 40, Zombies.stats("Tank", 1, 1), 0)
+	w.speed = 0
+	Core.step(g, 0.1, 0, ev)
+	local hp1 = w.hp
+	Core.removePlant(g, "2_3")
+	Core.step(g, 1, 1, ev)
+	print(("  Burn: Tank lost %.1f HP to burn in the 1 s after the plant was removed"):format(hp1 - w.hp))
+end
+-- Wall: blocks, thorns, wilts (not removed), recovers at dawn.
+do
+	local f = Core.newField(houseX, 1)
+	Core.setPlant(f, "2_5", 2, PlotBuilder.colX(5), Combat.plantStats("Thornwall", "Medium", "Normal"))
+	local z = Core.addZombie(f, 1, "Tank", 2, PlotBuilder.colX(5) + 4, Zombies.stats("Tank", 1, 1), 0)
+	local ev, t, wiltAt = {}, 0, nil
+	while t < 60 and not wiltAt do
+		Core.step(f, 0.1, t, ev)
+		for _, e in ev do if e.kind == "wilt" then wiltAt = t end end
+		t += 0.1
+	end
+	local p = f.plants["2_5"]
+	print(("  Wall: Thornwall (%d HP) held a Tank for %.1f s, thorns dealt %.0f, wilted=%s, still in field=%s"):format(
+		p.maxHp, wiltAt or -1, Zombies.stats("Tank", 1, 1).hp - z.hp, tostring(p.wilted), tostring(f.plants["2_5"] ~= nil)))
+	Core.dawn(f, {})
+	print(("  Dawn: wilted=%s hp=%d/%d"):format(tostring(p.wilted), p.hp, p.maxHp))
+end
+-- Jumper vaults the first plant once; Spitter attacks from range.
+do
+	local f = Core.newField(houseX, 1)
+	Core.setPlant(f, "2_6", 2, PlotBuilder.colX(6), Combat.plantStats("Sunpetal", "Medium", "Normal"))
+	local j = Core.addZombie(f, 1, "Jumper", 2, PlotBuilder.colX(6) + 10, Zombies.stats("Jumper", 4, 1), 0)
+	local s = Core.addZombie(f, 2, "Spitter", 2, PlotBuilder.colX(6) + 40, Zombies.stats("Spitter", 5, 1), 0)
+	local ev, t, jumped, spitFrom = {}, 0, false, nil
+	while t < 20 do
+		Core.step(f, 0.1, t, ev)
+		for _, e in ev do
+			if e.kind == "jump" then jumped = true end
+			if e.kind == "spit" and not spitFrom then spitFrom = e.zombie.x - e.plant.x end
+		end
+		t += 0.1
+	end
+	print(("  Jumper: vaulted=%s, now %.1f studs past the plant  Spitter: attacked from %.1f studs (range %d)"):format(
+		tostring(jumped), PlotBuilder.colX(6) - j.x, spitFrom or -1, Zombies.stats("Spitter", 5, 1).range))
+	local _ = s
+end
+-- Isolation: two plots' fields never share zombies.
+do
+	local a, b = Core.newField(houseX, 1), Core.newField(houseX, 1)
+	Core.setPlant(b, "1_3", 1, px, Combat.plantStats("PeaPopper", "Medium", "Normal"))
+	Core.addZombie(a, 1, "Walker", 1, px + 20, Zombies.stats("Walker", 1, 1), 0)
+	local ev = {}
+	for i = 0, 50 do Core.step(b, 0.1, i / 10, ev) end
+	print(("  Isolation: plot B's plant fired %d times at plot A's zombie (expected 0)"):format(#ev))
+	assert(#ev == 0)
+end
+
+print("\n-- Fairness: wave size by lanes, stats by biome --")
+for _, lanes in { 3, 5, 7 } do
+	print(("  %d lanes: night 1 %d, night 5 %d, night 12+ %d zombies (%.1f per lane at night 12)"):format(lanes,
+		Zombies.waveSize(1, lanes), Zombies.waveSize(5, lanes), Zombies.waveSize(12, lanes), Zombies.waveSize(12, lanes) / lanes))
+end
+for _, k in { 1, 5, 10, 15 } do
+	local w = Zombies.stats("Walker", k, 1)
+	local pea = Plants.ByBiome[Biomes.List[k].Id]
+	local best = 0
+	for _, pl in pea do best = math.max(best, pl.Combat.Damage * pl.Combat.AttackRate) end
+	print(("  biome %2d: Walker HP %d, dmg %.1f; best plant DPS in that biome %.1f"):format(k, w.hp, w.damage, best))
+end
 '''
 
 
