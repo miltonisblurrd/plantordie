@@ -3,6 +3,13 @@
 
 local Parts = {}
 
+local made = 0
+
+-- Parts created through this factory (world part budget, printed at boot).
+function Parts.count(): number
+	return made
+end
+
 export type Props = {
 	Name: string?,
 	Size: Vector3,
@@ -37,6 +44,7 @@ function Parts.make(p: Props): BasePart
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.CastShadow = true
 	part.Parent = p.Parent
+	made += 1
 	return part
 end
 

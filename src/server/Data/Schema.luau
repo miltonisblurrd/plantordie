@@ -45,6 +45,9 @@ export type Profile = {
 	nextItemId: number,
 	planted: { [string]: PlantedTile }, -- tile key "lane_col" -> plant
 	shovelTier: number,
+	-- Unbanked dig rewards (species -> count). Saved so a disconnect never wipes them; only a
+	-- guardian catch clears it. Banked into `seeds` at your plot or the hub fountain.
+	expedition: { [string]: number },
 	water: { channel: boolean, sprinkler: boolean, pond: boolean },
 	fusion: { Neon: FusionSlot, Mega: FusionSlot },
 	collection: { [string]: boolean }, -- "species|variant" discovered
@@ -91,6 +94,7 @@ function Schema.default(): Profile
 		nextItemId = 1,
 		planted = {},
 		shovelTier = Config.Start.ShovelTier,
+		expedition = {},
 		water = { channel = false, sprinkler = false, pond = false },
 		fusion = { Neon = idleSlot(), Mega = idleSlot() },
 		collection = {},
@@ -146,6 +150,11 @@ local migrations: { [number]: (any) -> any } = {
 		end
 		d.seeds = seeds
 		d.version = 2
+		return d
+	end,
+	[2] = function(d)
+		-- v3 adds the expedition bag; reconcile fills it with an empty map.
+		d.version = 3
 		return d
 	end,
 }

@@ -24,10 +24,10 @@ end
 function Hub.build(parent: Instance): Model
 	local m = Parts.model("Hub", parent)
 
-	local outer = W.PlotRingRadius + Config.Plot.Depth
+	local outer = Config.Biome.RingRadius + Config.Biome.Size * 0.75
 	Parts.make({
 		Name = "Baseplate", Parent = m, Color = Color3.fromRGB(78, 176, 70), Material = Enum.Material.Grass,
-		Size = Vector3.new(outer * 2 + 200, 2, outer * 2 + 200), CFrame = CFrame.new(0, W.GroundY - 1.2, 0),
+		Size = Vector3.new(math.min(outer * 2, 2048), 2, math.min(outer * 2, 2048)), CFrame = CFrame.new(0, W.GroundY - 1.2, 0),
 	})
 	disc("GateRing", W.GateRingRadius + 14, W.GroundY + 0.1, 1, Color3.fromRGB(196, 186, 168), nil, m)
 	disc("Plaza", W.HubRadius, W.GroundY + 0.2, 1, Color3.fromRGB(110, 222, 92), Enum.Material.Grass, m)

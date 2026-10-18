@@ -1,7 +1,7 @@
 --!strict
 -- One biome gate arch with a sign and a collidable barrier. -Z of `cf` points away from the hub.
 -- The barrier blocks everyone server-side; the client disables it locally for biomes the
--- player owns, and P3 travel re-checks ownership on the server.
+-- player owns. The real rule is the server's biome region check (Biomes.luau).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -63,14 +63,17 @@ function Gate.build(biome: Biomes.Biome, cf: CFrame, parent: Instance): Model
 	barrier:SetAttribute("BiomeId", biome.Id)
 	if biome.Cost == 0 then
 		barrier.Transparency = 1
+	else
+		local prompt = Instance.new("ProximityPrompt")
+		prompt.Name = "UnlockBiomePrompt"
+		prompt.ActionText = `Unlock {Format.money(biome.Cost)}`
+		prompt.ObjectText = biome.Name
+		prompt.HoldDuration = 0
+		prompt.MaxActivationDistance = 14
+		prompt.RequiresLineOfSight = false
+		prompt:SetAttribute("BiomeId", biome.Id)
+		prompt.Parent = barrier
 	end
-
-	-- Where P3 travel starts (just outside the barrier).
-	local pad = Parts.make({
-		Name = "TravelPad", Parent = m, Color = pal.Ground,
-		Size = Vector3.new(OPEN_W, 0.4, 8), CFrame = cf * CFrame.new(0, 0.2, -5),
-	})
-	pad:SetAttribute("BiomeId", biome.Id)
 
 	return m
 end
