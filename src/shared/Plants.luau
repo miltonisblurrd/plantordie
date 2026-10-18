@@ -2,6 +2,7 @@
 -- Plant definitions (spec §4): 4 exclusive species per biome, Common..Divine across progression.
 
 local Biomes = require(script.Parent.Biomes)
+local Config = require(script.Parent.Config)
 
 export type Shape = "Ball" | "Block" | "Cylinder" | "Wedge"
 export type Accent = "Leaves" | "Petals" | "Spikes" | "Cap" | "None"
@@ -253,16 +254,46 @@ local roster: { [string]: { Spec } } = {
 	},
 }
 
+-- Event species (spec §12): same growth/size/income/fusion pipeline, tagged with the event's
+-- biome id instead of a world biome. They use biome 4's curves (mid-game) so a lucky early pack
+-- helps without outclassing late biomes.
+local EVENT_TIER = 4
+local eventRoster: { [string]: { Spec } } = {
+	halloween = {
+		{ id = "PumpkinSprout", name = "Pumpkin Sprout", rarity = "Common", role = "Income", flavour = 1, desc = "A tiny pumpkin that coughs up coins.",
+			stem = hx("#3E6B2F"), head = "Ball", headColor = hx("#FF7518"), accent = "Leaves", accentColor = hx("#2E4A1F") },
+		{ id = "GhostBlossom", name = "Ghost Blossom", rarity = "Uncommon", role = "Slow", flavour = 0.9, ability = "Chill", desc = "A see-through flower whose touch chills zombies.",
+			stem = hx("#C8D6E5"), head = "Ball", headColor = hx("#F1F2F6"), accent = "Petals", accentColor = hx("#A29BFE") },
+		{ id = "CandyCornPlant", name = "Candy Corn Plant", rarity = "Rare", role = "Rapid", flavour = 1, desc = "Fires candy corn kernels in quick bursts.",
+			stem = hx("#6AB04C"), head = "Wedge", headColor = hx("#FFB142"), accent = "Spikes", accentColor = hx("#FFFFFF") },
+		{ id = "HauntedThornbush", name = "Haunted Thornbush", rarity = "Epic", role = "Wall", flavour = 0.9, ability = "Thorns", desc = "A cursed hedge. Zombies get stuck in it.",
+			stem = hx("#2D1B2E"), stemShape = "Block", stemHeight = 1.2, head = "Block", headColor = hx("#4B2C5E"), headSize = 3.4, accent = "Spikes", accentColor = hx("#9B59B6") },
+		{ id = "JackOLanternTree", name = "Jack-o'-Lantern Tree", rarity = "Legendary", role = "AoE", flavour = 1.1, desc = "Drops grinning lanterns that burst on crowds.",
+			stem = hx("#4A2F1B"), stemShape = "Block", stemHeight = 4.2, head = "Ball", headColor = hx("#FF8C1A"), headSize = 3, accent = "Leaves", accentColor = hx("#2E1A47") },
+		{ id = "PhantomLily", name = "Phantom Lily", rarity = "Mythical", role = "Burn", flavour = 1, ability = "Hex", desc = "A ghostly lily that hexes zombies over time.",
+			stem = hx("#6C5CE7"), head = "Cylinder", headColor = hx("#DFE6E9"), accent = "Petals", accentColor = hx("#6C5CE7") },
+		{ id = "HeadlessHarvest", name = "Headless Harvest", rarity = "Divine", role = "Income", flavour = 1.2, desc = "A harvest that rides at midnight. Enormous income.",
+			stem = hx("#1E1E1E"), head = "Ball", headColor = hx("#FF5E00"), headSize = 2.8, accent = "Cap", accentColor = hx("#5F27CD") },
+	},
+}
+
 local list: { Plant } = {}
+local tiers: { { biome: string, index: number, specs: { Spec } } } = {}
 for biomeIndex, biome in Biomes.List do
-	local specs: { Spec } = roster[biome.Id] or {}
-	for _, s in specs do
+	table.insert(tiers, { biome = biome.Id, index = biomeIndex, specs = roster[biome.Id] or {} })
+end
+for biomeId, specs in eventRoster do
+	table.insert(tiers, { biome = biomeId, index = EVENT_TIER, specs = specs })
+end
+for _, tier in tiers do
+	local biomeIndex = tier.index
+	for _, s in tier.specs do
 		local role = ROLE_STATS[s.role]
 		local scale = 1 + 0.6 * (biomeIndex - 1)
 		table.insert(list, {
 			Id = s.id,
 			Name = s.name,
-			Biome = biome.Id,
+			Biome = tier.biome,
 			Rarity = s.rarity,
 			BaseIncome = BIOME_INCOME[biomeIndex] * s.flavour,
 			GrowSeconds = math.floor(BIOME_GROW[biomeIndex] * RARITY_GROW[s.rarity]),
@@ -299,10 +330,11 @@ for _, plant in list do
 	table.insert(byBiome[plant.Biome], plant)
 end
 
+local VM = Config.Economy.VariantMultiplier
 local variants: { [string]: Variant } = {
-	Normal = { Id = "Normal", IncomeMultiplier = 1, Neon = false, Rainbow = false },
-	Neon = { Id = "Neon", IncomeMultiplier = 3, Neon = true, Rainbow = false },
-	Mega = { Id = "Mega", IncomeMultiplier = 10, Neon = true, Rainbow = true },
+	Normal = { Id = "Normal", IncomeMultiplier = VM.Normal, Neon = false, Rainbow = false },
+	Neon = { Id = "Neon", IncomeMultiplier = VM.Neon, Neon = true, Rainbow = false },
+	Mega = { Id = "Mega", IncomeMultiplier = VM.Mega, Neon = true, Rainbow = true },
 }
 
 return {

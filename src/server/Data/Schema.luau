@@ -24,14 +24,23 @@ export type PlantItem = {
 	variant: string,
 }
 
+-- Fusion state machine (spec §11): "empty" -> "fusing" -> "ready" -> claimed (back to "empty").
+-- "ready" is pure timestamp math (os.time() >= endsAt), so offline fusions finish on their own.
+-- `last` remembers the most recent claim so a duplicate claim returns it instead of a new plant.
 export type FusionSlot = {
-	state: string, -- "Idle" | "Running" | "Ready"
+	unlocked: boolean,
+	state: string, -- "empty" | "fusing" | "ready"
+	runId: number, -- increments on every start
 	species: string?,
 	rarity: string?,
 	size: string?,
-	startedAt: number,
+	startedAt: number, -- server os.time()
 	endsAt: number,
+	ingredients: { PlantItem }?,
+	last: { runId: number, itemId: string, claimed: boolean }?,
 }
+
+export type PendingGrant = { key: string, arg: string? }
 
 export type Profile = {
 	version: number,
@@ -54,12 +63,16 @@ export type Profile = {
 	event: {
 		currency: { [string]: number },
 		inventory: { [string]: number },
-		quests: { [string]: number },
+		quests: { [string]: number }, -- "eventId|questId" -> progress
+		questsDone: { [string]: boolean },
 	},
+	credits: { [string]: number }, -- Robux products granted with nothing to apply to yet
 	growthBoostEndsAt: number,
 	lastSeen: number, -- os.time() of the last successful save; drives offline earnings
 	starterGranted: boolean,
-	receiptLedger: { order: { string }, seen: { [string]: boolean } },
+	-- PurchaseIds already processed (capped). `pending` holds grants whose ledger entry is saved
+	-- but whose effect is not yet applied; they are applied on the next load.
+	receiptLedger: { order: { string }, seen: { [string]: boolean }, pending: { [string]: PendingGrant } },
 	stats: {
 		firstJoin: number,
 		lastJoin: number,
@@ -77,7 +90,7 @@ export type Profile = {
 local Schema = {}
 
 local function idleSlot(): FusionSlot
-	return { state = "Idle", startedAt = 0, endsAt = 0 }
+	return { unlocked = false, state = "empty", runId = 0, startedAt = 0, endsAt = 0 }
 end
 
 function Schema.default(): Profile
@@ -98,11 +111,12 @@ function Schema.default(): Profile
 		water = { channel = false, sprinkler = false, pond = false },
 		fusion = { Neon = idleSlot(), Mega = idleSlot() },
 		collection = {},
-		event = { currency = {}, inventory = {}, quests = {} },
+		event = { currency = {}, inventory = {}, quests = {}, questsDone = {} },
+		credits = {},
 		growthBoostEndsAt = 0,
 		lastSeen = 0,
 		starterGranted = false,
-		receiptLedger = { order = {}, seen = {} },
+		receiptLedger = { order = {}, seen = {}, pending = {} },
 		stats = {
 			firstJoin = now,
 			lastJoin = now,
@@ -155,6 +169,12 @@ local migrations: { [number]: (any) -> any } = {
 	[2] = function(d)
 		-- v3 adds the expedition bag; reconcile fills it with an empty map.
 		d.version = 3
+		return d
+	end,
+	[3] = function(d)
+		-- v4 replaces the unused fusion stub with the real state machine; reconcile refills it.
+		d.fusion = nil
+		d.version = 4
 		return d
 	end,
 }

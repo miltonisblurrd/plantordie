@@ -1,6 +1,6 @@
 --!strict
 -- In-game money purchases: lanes (in order), house tiers (in order, biome-gated), biome
--- unlocks (in order, A8) and shovel tiers (in order).
+-- unlocks (in order, A8), shovel tiers (in order) and water tiers (in order, P5).
 -- The client shows a confirm with the exact benefit and price; the server re-checks everything.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -127,7 +127,37 @@ local function buyShovel(player: Player)
 	Net.notify(player, `Upgraded to {nextDef.Name}!`)
 end
 
+-- Water tiers in order (channel -> sprinkler -> pond). The client names the tier so a stale
+-- double-click can't buy the next one by accident.
+local function buyWater(player: Player, key: string)
+	local session = Data.get(player)
+	if not session or not Plots.plotOf(player) then
+		return
+	end
+	local d = session.data
+	local nextDef = Upgrades.nextWater(d.water)
+	if not nextDef then
+		Net.notify(player, "You own every water upgrade.", "warn")
+		return
+	end
+	if nextDef.Key ~= key then
+		Net.notify(player, `Buy water upgrades in order. Next is {nextDef.Name}.`, "warn")
+		return
+	end
+	if d.money < nextDef.Cost then
+		Net.notify(player, `Not enough money. {nextDef.Name} costs {Format.money(nextDef.Cost)}.`, "error")
+		return
+	end
+	Data.update(player, function(p)
+		p.money -= nextDef.Cost
+		p.water[nextDef.Key] = true
+	end)
+	Plots.refresh(player)
+	Net.notify(player, `{nextDef.Name} built! Plants grow x{nextDef.GrowthMultiplier} faster.`)
+end
+
 function Shop.start()
+	Net.on("BuyWater", { "string" }, buyWater)
 	Net.on("UnlockBiome", { "string" }, unlockBiome)
 	Net.on("BuyShovel", {}, buyShovel)
 	Net.on("BuyLane", {}, buyLane)

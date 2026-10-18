@@ -29,8 +29,14 @@ local list: { RemoteDef } = {
 	{ Name = "Repair", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "UseTrap", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "HitZombie", Kind = "Event", Rate = 5, Burst = 8 },
-	{ Name = "FusionStart", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
-	{ Name = "FusionClaim", Kind = "Event", Rate = 1, Burst = 2 }, -- P5
+	{ Name = "BuyWater", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "FusionUnlock", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "FusionStart", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "FusionClaim", Kind = "Event", Rate = 2, Burst = 4 },
+	{ Name = "PurchaseIntent", Kind = "Event", Rate = 2, Burst = 4 },
+	{ Name = "UseCredit", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "EventBuyPack", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "EventDig", Kind = "Event", Rate = 1, Burst = 2 },
 }
 
 local byName: { [string]: RemoteDef } = {}

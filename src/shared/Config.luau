@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 3,
+		SchemaVersion = 4,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -13,6 +13,20 @@ local Config = {
 		ReceiptLedgerCap = 200,
 		BindToCloseTimeout = 25,
 		KickMessage = "We couldn't load your garden safely, so we stopped before anything was lost. Please rejoin in a minute!",
+	},
+
+	-- Income multiplier per variant (spec §11). Applied on top of rarity x size, so a Mega Divine
+	-- stays far above a Mega Common (25x rarity gap is preserved).
+	Economy = {
+		VariantMultiplier = { Normal = 1, Neon = 3, Mega = 8 },
+	},
+
+	Event = {
+		CheckSeconds = 10, -- how often the event manager re-reads the window
+		DigRange = 14, -- studs from the pumpkin patch
+		FogColor = Color3.fromRGB(70, 30, 100),
+		FogStart = 60,
+		FogEnd = 700,
 	},
 
 	Start = {

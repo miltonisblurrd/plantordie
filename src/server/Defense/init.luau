@@ -73,6 +73,13 @@ type PlotState = {
 
 local Defense = {}
 
+local survivedCallbacks: { (Player) -> () } = {}
+
+-- Fires at dawn for each player whose house survived a wave that reached them.
+function Defense.onNightSurvived(cb: (Player) -> ())
+	table.insert(survivedCallbacks, cb)
+end
+
 local states: { [Player]: PlotState } = {}
 local rng = Random.new()
 local nextId = 0
@@ -439,6 +446,9 @@ local function endWave(player: Player)
 			p.seeds[drop.Plant] = (p.seeds[drop.Plant] or 0) + 1
 		end
 	end)
+	for _, cb in survivedCallbacks do
+		task.spawn(cb, player)
+	end
 	local seedName = if drop and Plants.ById[drop.Plant] then Plants.ById[drop.Plant].Name else nil
 	Net.notify(
 		player,

@@ -91,6 +91,7 @@ function Plots.refresh(player: Player)
 	local refs = refsByIndex[idx]
 	PlotBuilder.setLanes(refs, session.data.lanesUnlocked)
 	PlotBuilder.setHouseTier(refs, session.data.houseTier)
+	PlotBuilder.setWater(refs, session.data.water)
 end
 
 local function teleportHome(player: Player, character: Model)
@@ -163,6 +164,7 @@ local function release(player: Player)
 	refs.ownerLabel.Text = "Empty Plot"
 	PlotBuilder.setLanes(refs, Config.Start.LanesUnlocked)
 	PlotBuilder.setHouseTier(refs, 1)
+	PlotBuilder.setWater(refs, { channel = false, sprinkler = false, pond = false })
 end
 
 function Plots.start(worldFolder: Instance)

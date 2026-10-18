@@ -267,25 +267,6 @@ function Data.update(player: Player, mutate: (Profile) -> ()): boolean
 	return true
 end
 
--- Idempotency ledger for ProcessReceipt. Returns false if already granted.
-function Data.recordReceipt(profile: Profile, purchaseId: string): boolean
-	local ledger = profile.receiptLedger
-	if ledger.seen[purchaseId] then
-		return false
-	end
-	ledger.seen[purchaseId] = true
-	table.insert(ledger.order, purchaseId)
-	while #ledger.order > Config.Data.ReceiptLedgerCap do
-		local oldest = table.remove(ledger.order, 1) :: string
-		ledger.seen[oldest] = nil
-	end
-	return true
-end
-
-function Data.hasReceipt(profile: Profile, purchaseId: string): boolean
-	return profile.receiptLedger.seen[purchaseId] == true
-end
-
 function Data.mode(): Store.Mode
 	return Store.getMode()
 end

@@ -11,6 +11,7 @@ local Economy = require(ReplicatedStorage.Shared.Economy)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local Plants = require(ReplicatedStorage.Shared.Plants)
+local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
@@ -273,11 +274,7 @@ end
 
 local function waterOk(profile: Data.Profile, speciesId: string): boolean
 	local def = Plants.ById[speciesId]
-	if not def or not def.WaterDependent then
-		return true
-	end
-	local w = profile.water
-	return w.channel or w.sprinkler or w.pond
+	return def == nil or Upgrades.waterAllows(profile.water, speciesId, def.WaterDependent)
 end
 
 -- All checks and the state write run without yielding, so spammed remotes can't double-spend.
@@ -294,7 +291,8 @@ local function plantSeed(player: Player, key: string, species: string)
 		return
 	end
 	if not waterOk(d, species) then
-		Net.notify(player, `{def.Name} needs a water upgrade first.`, "error")
+		local tier = Upgrades.waterTierFor(species)
+		Net.notify(player, `{def.Name} needs the {if tier then tier.Name else "a water"} upgrade first.`, "error")
 		return
 	end
 	local size = Economy.rollSize(species, rng)
@@ -326,6 +324,11 @@ local function placePlant(player: Player, key: string, itemId: string)
 	local item = session.data.plants[itemId]
 	if not item or not Plants.ById[item.species] then
 		Net.notify(player, "You don't have that plant.", "error")
+		return
+	end
+	if not waterOk(session.data, item.species) then
+		local tier = Upgrades.waterTierFor(item.species)
+		Net.notify(player, `{Plants.ById[item.species].Name} needs the {if tier then tier.Name else "a water"} upgrade first.`, "error")
 		return
 	end
 	Data.update(player, function(p)

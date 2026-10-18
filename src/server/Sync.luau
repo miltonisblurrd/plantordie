@@ -8,7 +8,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
-local Events = require(ReplicatedStorage.Shared.Events)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
@@ -35,6 +34,15 @@ end
 
 function Sync.setDefenseProvider(fn: (Player) -> { [string]: any }?)
 	defenseProvider = fn
+end
+
+-- Limited-time event HUD block, owned by Event (P5).
+local eventProvider: (Player) -> { [string]: any }? = function(_player: Player)
+	return nil
+end
+
+function Sync.setEventProvider(fn: (Player) -> { [string]: any }?)
+	eventProvider = fn
 end
 
 function Sync.houseHp(player: Player): number
@@ -95,7 +103,6 @@ function Sync.push(player: Player)
 	end
 	local d = session.data
 	local house = Houses.List[d.houseTier] or Houses.List[1]
-	local event = Events.active(os.time())
 	local planted = 0
 	for _ in d.planted do
 		planted += 1
@@ -119,7 +126,12 @@ function Sync.push(player: Player)
 		shovelTier = d.shovelTier,
 		bag = d.expedition,
 		defense = defenseProvider(player),
-		event = if event then { name = event.Name, endsAt = event.EndsAt } else nil,
+		event = eventProvider(player),
+		water = d.water,
+		fusion = d.fusion,
+		credits = d.credits,
+		collection = d.collection,
+		growthBoostEndsAt = d.growthBoostEndsAt,
 		persistent = Data.mode() == "DataStore",
 	})
 end

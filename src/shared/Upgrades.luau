@@ -12,6 +12,17 @@ export type Shovel = {
 	Color: Color3,
 }
 
+-- Water tiers are bought in order. Each multiplies growth speed (they stack) and unlocks the
+-- water-dependent species listed; owning a later tier implies the earlier ones.
+export type WaterTier = {
+	Key: "channel" | "sprinkler" | "pond", -- profile.water field
+	Name: string,
+	Cost: number,
+	GrowthMultiplier: number,
+	Unlocks: { string },
+	Description: string,
+}
+
 local shovels: { Shovel } = {
 	{ Tier = 1, Name = "Rusty Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Color = Color3.fromHex("#8B6B4A") },
 	{ Tier = 2, Name = "Iron Shovel", Cost = 10_000, DigSeconds = 2.2, LuckBonus = 0.05, ToughTier = 2, Color = Color3.fromHex("#B0B6BE") },
@@ -20,11 +31,56 @@ local shovels: { Shovel } = {
 	{ Tier = 5, Name = "Void Shovel", Cost = 150_000_000, DigSeconds = 0.7, LuckBonus = 0.4, ToughTier = 4, Color = Color3.fromHex("#C77DFF") },
 }
 
-return {
-	Shovels = shovels,
-	Water = {
-		Channel = { Cost = 50_000, GrowthMultiplier = 1.15 },
-		Sprinkler = { Cost = 2_000_000, GrowthMultiplier = 1.35 },
-		Pond = { Cost = 75_000_000, GrowthMultiplier = 1.6 },
-	},
+local channel: WaterTier = {
+	Key = "channel", Name = "Water Channel", Cost = 50_000, GrowthMultiplier = 1.15, Unlocks = { "KelpRibbon" },
+	Description = "A stone channel behind your garden.",
 }
+local sprinkler: WaterTier = {
+	Key = "sprinkler", Name = "Sprinklers", Cost = 2_000_000, GrowthMultiplier = 1.35, Unlocks = { "AnemoneBloom" },
+	Description = "Sprinkler heads along the channel.",
+}
+local pond: WaterTier = {
+	Key = "pond", Name = "Garden Pond", Cost = 75_000_000, GrowthMultiplier = 1.6, Unlocks = { "ToxicVine" },
+	Description = "A deep pond behind the channel.",
+}
+local waterOrder: { WaterTier } = { channel, sprinkler, pond }
+
+type WaterState = { channel: boolean, sprinkler: boolean, pond: boolean }
+
+local Upgrades = {
+	Shovels = shovels,
+	Water = { Channel = channel, Sprinkler = sprinkler, Pond = pond },
+	WaterOrder = waterOrder,
+}
+
+function Upgrades.nextWater(water: WaterState): WaterTier?
+	for _, t in waterOrder do
+		if not water[t.Key] then
+			return t
+		end
+	end
+	return nil
+end
+
+-- The tier that unlocks a water-dependent species (nil = any water tier works).
+function Upgrades.waterTierFor(speciesId: string): WaterTier?
+	for _, t in waterOrder do
+		if table.find(t.Unlocks, speciesId) then
+			return t
+		end
+	end
+	return nil
+end
+
+function Upgrades.waterAllows(water: WaterState, speciesId: string, waterDependent: boolean): boolean
+	if not waterDependent then
+		return true
+	end
+	local tier = Upgrades.waterTierFor(speciesId)
+	if tier then
+		return water[tier.Key]
+	end
+	return water.channel or water.sprinkler or water.pond
+end
+
+return Upgrades

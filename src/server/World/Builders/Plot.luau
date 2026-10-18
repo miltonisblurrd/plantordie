@@ -10,6 +10,7 @@ local Lanes = require(ReplicatedStorage.Shared.Lanes)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Parts = require(script.Parent.Parent.Parts)
 local House = require(script.Parent.House)
+local Machine = require(script.Parent.Machine)
 
 local P = Config.Plot
 local T = P.TileSize
@@ -31,6 +32,8 @@ export type PlotRefs = {
 	house: Model,
 	ownerLabel: TextLabel,
 	spawn: CFrame,
+	machines: { [string]: Model },
+	water: Folder,
 }
 
 local PlotBuilder = {}
@@ -96,25 +99,6 @@ local function buildLaneLock(refs: PlotRefs, lane: number)
 	refs.laneLocks[lane] = m
 end
 
-local function buildPad(refs: PlotRefs, name: string, label: string, x: number, color: Color3)
-	local cf = refs.cframe
-	local pad = Parts.make({
-		Name = name, Parent = refs.model, Color = Color3.fromRGB(60, 60, 70),
-		Size = Vector3.new(12, 0.6, 12), CFrame = cf * CFrame.new(x, 0.3, -42),
-	})
-	pad:SetAttribute("PlotIndex", refs.index)
-	Parts.make({
-		Name = name .. "Ring", Parent = refs.model, Color = color, Material = Enum.Material.Neon,
-		CanCollide = false, Size = Vector3.new(12.4, 0.2, 12.4), CFrame = cf * CFrame.new(x, 0.55, -42),
-		Transparency = 0.5,
-	})
-	local sign = Parts.make({
-		Name = name .. "Sign", Parent = refs.model, Color = Color3.fromHex("#1E2A22"),
-		Size = Vector3.new(10, 2.4, 0.4), CFrame = cf * CFrame.new(x, 1.8, -48.6),
-	})
-	Parts.surfaceText(sign, Enum.NormalId.Front, label .. "\n(coming soon)", color)
-end
-
 function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRefs
 	local model = Parts.model(`Plot_{index}`, parent)
 	model:SetAttribute("PlotIndex", index)
@@ -152,6 +136,8 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		house = nil :: any,
 		ownerLabel = nil :: any,
 		spawn = cf * CFrame.new(P.HouseX, 4, -40),
+		machines = {},
+		water = nil :: any,
 	}
 
 	local tileFolder = Instance.new("Folder")
@@ -210,8 +196,13 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	stroke.Parent = label
 	refs.ownerLabel = label
 
-	buildPad(refs, "NeonMakerPad", "NEON MAKER", -6, Color3.fromRGB(80, 255, 220))
-	buildPad(refs, "MegaMakerPad", "MEGA MAKER", 18, Color3.fromRGB(255, 90, 220))
+	refs.machines.Neon = Machine.build("Neon", index, cf * CFrame.new(-6, 0, -42), model)
+	refs.machines.Mega = Machine.build("Mega", index, cf * CFrame.new(18, 0, -42), model)
+
+	local water = Instance.new("Folder")
+	water.Name = "Water"
+	water.Parent = model
+	refs.water = water
 
 	return refs
 end
@@ -243,6 +234,64 @@ function PlotBuilder.setHouseTier(refs: PlotRefs, tier: number)
 		refs.house:Destroy()
 	end
 	refs.house = House.build(tier, refs.houseBase, refs.model)
+end
+
+-- Water upgrades sit behind lane 1 (the +Z edge), outside the tile grid, so lanes, tiles and
+-- zombie paths are untouched. Rebuilt from the saved flags.
+function PlotBuilder.setWater(refs: PlotRefs, water: { channel: boolean, sprinkler: boolean, pond: boolean })
+	local key = `{water.channel}{water.sprinkler}{water.pond}`
+	if refs.water:GetAttribute("Key") == key then
+		return
+	end
+	refs.water:SetAttribute("Key", key)
+	refs.water:ClearAllChildren()
+	local cf = refs.cframe
+	local gardenW, gardenD = P.Columns * T, P.Lanes * T
+	local midX = P.GardenOriginX + gardenW / 2
+	local z = gardenD / 2 + 3
+	local blue = Color3.fromRGB(70, 170, 255)
+	if water.channel or water.sprinkler or water.pond then
+		Parts.make({
+			Name = "ChannelStone", Parent = refs.water, Color = Color3.fromRGB(150, 150, 158),
+			Size = Vector3.new(gardenW + 2, 0.8, 4), CFrame = cf * CFrame.new(midX, 0.4, z),
+		})
+		Parts.make({
+			Name = "ChannelWater", Parent = refs.water, Color = blue, Material = Enum.Material.Glass,
+			Transparency = 0.25, CanCollide = false,
+			Size = Vector3.new(gardenW, 0.3, 2.6), CFrame = cf * CFrame.new(midX, 0.85, z),
+		})
+	end
+	if water.sprinkler or water.pond then
+		for i = 0, 3 do
+			local x = P.GardenOriginX + gardenW * (i + 0.5) / 4
+			local head = Parts.make({
+				Name = "Sprinkler", Parent = refs.water, Color = Color3.fromRGB(200, 200, 210),
+				Size = Vector3.new(0.6, 2.4, 0.6), CFrame = cf * CFrame.new(x, 1.2, z - 2.4),
+			})
+			local spray = Instance.new("ParticleEmitter")
+			spray.Color = ColorSequence.new(Color3.fromRGB(170, 220, 255))
+			spray.Rate = 6
+			spray.Lifetime = NumberRange.new(0.8, 1.2)
+			spray.Speed = NumberRange.new(6, 9)
+			spray.SpreadAngle = Vector2.new(40, 40)
+			spray.Size = NumberSequence.new(0.25)
+			spray.Transparency = NumberSequence.new(0.3)
+			spray.Acceleration = Vector3.new(0, -20, 0)
+			spray.Parent = head
+		end
+	end
+	if water.pond then
+		Parts.make({
+			Name = "PondRim", Parent = refs.water, Color = Color3.fromRGB(150, 150, 158),
+			Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.8, 19, 19),
+			CFrame = cf * CFrame.new(midX, 0.4, z + 13) * CFrame.Angles(0, 0, math.rad(90)),
+		})
+		Parts.make({
+			Name = "PondWater", Parent = refs.water, Color = blue, Material = Enum.Material.Glass,
+			Transparency = 0.2, CanCollide = false, Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.3, 17, 17),
+			CFrame = cf * CFrame.new(midX, 0.85, z + 13) * CFrame.Angles(0, 0, math.rad(90)),
+		})
+	end
 end
 
 return PlotBuilder
