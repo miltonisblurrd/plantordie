@@ -74,6 +74,9 @@ function Ui.button(name: string, text: string, parent: Instance): TextButton
 	pad.PaddingTop = UDim.new(0, 6)
 	pad.PaddingBottom = UDim.new(0, 6)
 	pad.Parent = b
+	b.Activated:Connect(function()
+		require(script.Parent.Sfx).play("Click")
+	end)
 	return b
 end
 
