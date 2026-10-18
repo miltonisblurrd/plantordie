@@ -1,0 +1,27 @@
+---
+description: Plant or Die studio fleet. Eight steps, six Grok seats, one Cursor agent per task. Chief merges after the final review.
+alwaysApply: true
+---
+
+# Studio fleet
+
+Solo studio. Grok runs the desk. Cursor writes the code. Chief merges after the final review. The owner is not in the loop.
+
+Active limit: 2 tasks. One Cursor cloud agent per task. A coding agent does not open a pull request and does not merge it.
+
+No step starts until the artifact from the previous step is written under `studio/tasks/<id>/`.
+
+1. Intake — Chief opens `board.md` before anyone codes. Quote the original ask.
+2. Blast radius — Researcher writes `blast.md` citing files, remotes, and features.
+3. Frozen cut — PM writes `cut.md`: in-scope, out-of-scope, acceptance checks. Version the cut.
+4. Brand pin — Design Lead writes `brand.md` only if UI is in the cut. Otherwise one line: non-UI.
+5. Build — Chief launches one Cursor cloud agent. It does not open the PR.
+6. Acceptance — QA writes `qa.md`: PASS, FAIL, or BLOCKED on the preview. CI green is not a pass.
+7. Gate — VP writes `proof.md` and opens the PR only if every proof row is present.
+8. Final review — Chief reads the proof packet. If it is complete, Chief merges. If a row is missing, Chief sends it back. Chief does not page the owner.
+
+Proof packet (`proof.md`) must include: original ask quoted and cut version named; what the player can now do and why; scope match with extras listed as not done; screenshot or playing recording; QA PASS separate from CI; Design bless or an explicit non-UI note.
+
+After every merge, Researcher updates `studio/ARCHITECTURE.md`.
+
+Held until asked: a separate Board bot, specialist frontend/backend bots, an incident watcher.
