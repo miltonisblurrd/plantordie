@@ -119,7 +119,7 @@ local function ownPlotOf(inst: Instance): boolean
 	return false
 end
 
-function Shops.start(bar: Frame)
+function Shops.start(bar: GuiObject)
 	local gui = Ui.screen("Upgrades", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
 	local p = Ui.panel("Panel", UDim2.fromOffset(340, 400), gui)
 	p.AnchorPoint = Vector2.new(0.5, 1)

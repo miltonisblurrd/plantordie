@@ -126,7 +126,42 @@ function Ui.confirm(title: string, body: string, yesText: string, onYes: () -> (
 	no.Activated:Connect(close)
 end
 
--- ScreenGui with safe-area insets and a UIScale that tracks the viewport (phones ~0.7, desktop 1).
+-- On touch screens the UIScale can shrink a 44 px button below 44 real pixels, so every
+-- fixed-offset button is grown back to at least MinTouch after scaling.
+local function enforceTouch(btn: GuiButton, scale: UIScale)
+	local min = math.ceil(Ui.MinTouch / scale.Scale)
+	local s = btn.Size
+	local x = if s.X.Scale == 0 and s.X.Offset > 0 and s.X.Offset < min then min else s.X.Offset
+	local y = if s.Y.Scale == 0 and s.Y.Offset > 0 and s.Y.Offset < min then min else s.Y.Offset
+	if x ~= s.X.Offset or y ~= s.Y.Offset then
+		btn.Size = UDim2.new(s.X.Scale, x, s.Y.Scale, y)
+	end
+end
+
+local function watchTouch(gui: ScreenGui, scale: UIScale)
+	local function hook(inst: Instance)
+		if inst:IsA("GuiButton") then
+			enforceTouch(inst, scale)
+			inst:GetPropertyChangedSignal("Size"):Connect(function()
+				enforceTouch(inst, scale)
+			end)
+		end
+	end
+	for _, d in gui:GetDescendants() do
+		hook(d)
+	end
+	gui.DescendantAdded:Connect(hook)
+	scale:GetPropertyChangedSignal("Scale"):Connect(function()
+		for _, d in gui:GetDescendants() do
+			if d:IsA("GuiButton") then
+				enforceTouch(d, scale)
+			end
+		end
+	end)
+end
+
+-- ScreenGui with safe-area insets (respects the top bar and notch) and a UIScale that tracks the
+-- viewport (phones ~0.65, desktop 1).
 function Ui.screen(name: string, playerGui: Instance, displayOrder: number?): ScreenGui
 	local gui = Instance.new("ScreenGui")
 	gui.Name = name
@@ -144,6 +179,9 @@ function Ui.screen(name: string, playerGui: Instance, displayOrder: number?): Sc
 	end
 	camera:GetPropertyChangedSignal("ViewportSize"):Connect(rescale)
 	rescale()
+	if game:GetService("UserInputService").TouchEnabled then
+		watchTouch(gui, scale)
+	end
 	gui.Parent = playerGui
 	return gui
 end

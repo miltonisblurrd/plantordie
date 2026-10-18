@@ -125,7 +125,7 @@ function EventShop.toggle()
 	refresh()
 end
 
-function EventShop.start(bar: Frame)
+function EventShop.start(bar: GuiObject)
 	local gui = Ui.screen("EventShop", Players.LocalPlayer:WaitForChild("PlayerGui"), 5)
 	local p = Ui.panel("Panel", UDim2.fromOffset(420, 500), gui)
 	p.AnchorPoint = Vector2.new(0.5, 0.5)

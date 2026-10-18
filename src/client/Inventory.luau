@@ -106,7 +106,7 @@ function Inventory.toggle()
 	end
 end
 
-function Inventory.start(bar: Frame)
+function Inventory.start(bar: GuiObject)
 	local gui = Ui.screen("Inventory", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
 	local p = Ui.panel("Panel", UDim2.fromOffset(340, 360), gui)
 	p.AnchorPoint = Vector2.new(0.5, 1)

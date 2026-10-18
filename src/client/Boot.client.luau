@@ -22,17 +22,37 @@ local Purchases = require(script.Parent.Purchases)
 local FusionPanel = require(script.Parent.FusionPanel)
 local EventShop = require(script.Parent.EventShop)
 local Collection = require(script.Parent.Collection)
+local Sfx = require(script.Parent.Sfx)
+local Effects = require(script.Parent.Effects)
+local Feedback = require(script.Parent.Feedback)
+local SettingsPanel = require(script.Parent.SettingsPanel)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
-local bar = Instance.new("Frame")
+-- Scrolls sideways when the buttons are wider than the screen; centred when they fit. The
+-- right gap keeps clear of the Lane View button.
+local bar = Instance.new("ScrollingFrame")
 bar.Name = "Bar"
 bar.BackgroundTransparency = 1
+bar.BorderSizePixel = 0
 bar.AnchorPoint = Vector2.new(0.5, 1)
-bar.Position = UDim2.new(0.5, 0, 1, -12)
-bar.Size = UDim2.fromOffset(620, 52)
+bar.Position = UDim2.new(0.5, -60, 1, -8)
+bar.Size = UDim2.new(1, -220, 0, 80)
+bar.ScrollingDirection = Enum.ScrollingDirection.X
+bar.AutomaticCanvasSize = Enum.AutomaticSize.X
+bar.CanvasSize = UDim2.new()
+bar.ScrollBarThickness = 4
+bar.VerticalScrollBarInset = Enum.ScrollBarInset.None
+bar.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
 bar.Parent = barGui
-Ui.list(bar, Enum.FillDirection.Horizontal, 10).HorizontalAlignment = Enum.HorizontalAlignment.Center
+local barLimit = Instance.new("UISizeConstraint")
+barLimit.MaxSize = Vector2.new(820, 80)
+barLimit.Parent = bar
+local barList = Ui.list(bar, Enum.FillDirection.Horizontal, 10)
+barList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+barList.VerticalAlignment = Enum.VerticalAlignment.Center
 
+Sfx.start()
+Effects.start()
 Notifications.start()
 Hud.start()
 CameraController.start()
@@ -51,4 +71,6 @@ Purchases.start()
 FusionPanel.start()
 Collection.start(bar)
 EventShop.start(bar)
+SettingsPanel.start(bar)
+Feedback.start()
 State.start()
