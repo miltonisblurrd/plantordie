@@ -152,7 +152,8 @@ INST.__index = function(o, k)
 	if methods[k] then return methods[k] end
 	local child = methods.FindFirstChild(o, k)
 	if child then return child end
-	if k == "Changed" or k == "Touched" or k == "Activated" or k:match("Changed$") or k:match("Triggered$") then
+	if k == "Changed" or k == "Touched" or k == "Activated" or k:match("Changed$") or k:match("Triggered$")
+		or k:match("Added$") or k:match("Removing$") or k == "Heartbeat" or k == "Stepped" or k == "OnServerEvent" then
 		return { Connect = function() return { Disconnect = function() end } end }
 	end
 	return nil
@@ -601,6 +602,137 @@ do
 		assert(math.abs(sum - 100) < 1e-6 and count == 7 and #e.Quests == 3)
 	end
 	for _, p in Products.List do assert(not Products.enabled(p.Key) or p.Id ~= 0) end
+end
+
+print("\n-- Economy: income formula and size ordering (A3, A4) --")
+do
+	local Economy = require(Shared.Economy)
+	local Rar = require(Shared.Rarities)
+	local Sz = require(Shared.Sizes)
+	local def = Plants.ById.PeaPopper
+	local rec = { species = "PeaPopper", rarity = def.Rarity, size = "Medium", variant = "Normal" }
+	local want = def.BaseIncome * Rar.ById[def.Rarity].Multiplier * Sz.ById.Medium.Multiplier
+	assert(math.abs(Economy.incomeOf(rec) - want) < 1e-9, "income = base x rarity x size x variant")
+	local last = -1
+	for _, size in Sz.List do
+		local inc = Economy.incomeOf({ species = "PeaPopper", rarity = def.Rarity, size = size.Id, variant = "Normal" })
+		assert(inc > last, "larger size must earn more: " .. size.Id)
+		last = inc
+	end
+	local neon = Economy.incomeOf({ species = "PeaPopper", rarity = def.Rarity, size = "Medium", variant = "Neon" })
+	local mega = Economy.incomeOf({ species = "PeaPopper", rarity = def.Rarity, size = "Medium", variant = "Mega" })
+	assert(neon > want and mega > neon, "variants raise income")
+	print(("  PeaPopper Medium $%.2f/s (formula match), sizes strictly increasing to $%.2f/s, Neon x%.0f, Mega x%.0f"):format(
+		want, last, neon / want, mega / want))
+end
+
+print("\n-- Offline growth and earnings by timestamps (A16) --")
+do
+	local Economy = require(Shared.Economy)
+	local def = Plants.ById.PeaPopper
+	local rec = { species = "PeaPopper", rarity = def.Rarity, size = "Medium", variant = "Normal", plantedAt = 1000 }
+	local _, s0 = Economy.growth(rec, 1000, 1)
+	local _, s1 = Economy.growth(rec, 1000 + def.GrowSeconds * 0.5, 1)
+	local _, s2 = Economy.growth(rec, 1000 + def.GrowSeconds, 1)
+	assert(s0 == 1 and s1 == 2 and s2 == 4, "stages advance from plantedAt alone")
+	local _, fast = Economy.growth(rec, 1000 + def.GrowSeconds / 1.15, 1.15)
+	assert(fast == 4, "water multiplier shortens growth")
+	local away = 2 * 3600
+	local earned, window = Economy.offlineEarnings({ a = rec }, 1000, 1000 + away, 1)
+	local expect = math.floor(Economy.incomeOf(rec) * (away - def.GrowSeconds) * Config.Garden.OfflineRate)
+	assert(earned == expect and window == away, "offline pays only after growth, at OfflineRate")
+	local capped, capWindow = Economy.offlineEarnings({ a = rec }, 1000, 1000 + 1e7, 1)
+	assert(capWindow == Config.Garden.OfflineCapHours * 3600 and capped > earned, "offline window is capped")
+	assert(Economy.offlineEarnings({ a = rec }, 0, 5000, 1) == 0, "no lastSeen pays nothing")
+	print(("  stages 1->2->4 by time; 2 h away earns $%d (window %d s, cap %d h)"):format(earned, window, Config.Garden.OfflineCapHours))
+end
+
+print("\n-- Biome access (A7, A8) --")
+do
+	local BiomesSrv = require(Server.Biomes)
+	do
+		local prof: any = { biomesUnlocked = {} }
+		local first, second = Biomes.List[1], Biomes.List[2]
+		assert(BiomesSrv.canEnter(prof, first.Id) == first.Released, "starter biome is free")
+		assert(not BiomesSrv.canEnter(prof, second.Id), "locked biome refused")
+		prof.biomesUnlocked[second.Id] = true
+		assert(BiomesSrv.canEnter(prof, second.Id) == second.Released, "bought biome opens")
+		local last = Biomes.List[#Biomes.List]
+		prof.biomesUnlocked[last.Id] = true
+		local was = last.Released
+		last.Released = false
+		assert(not BiomesSrv.canEnter(prof, last.Id), "unreleased biome refused even when owned")
+		last.Released = was
+		local released = 0
+		for _, b in Biomes.List do if b.Released then released += 1 end end
+		print(("  locked refused, bought allowed (stored in biomesUnlocked), unreleased refused even when owned; %d/15 released"):format(released))
+	end
+end
+
+print("\n-- Save data: migration never wipes (A25) --")
+do
+	local Schema = require(Server.Data.Schema)
+	local v1 = { version = 1, money = 12345, seeds = { ["PeaPopper|Common|Medium"] = 2, ["PeaPopper|Common|Large"] = 1 }, lanesUnlocked = 4,
+		biomesUnlocked = { [Biomes.List[2].Id] = true } }
+	local m = assert(Schema.migrate(v1))
+	assert(m.money == 12345 and m.seeds.PeaPopper == 3 and m.lanesUnlocked == 4 and m.biomesUnlocked[Biomes.List[2].Id], "v1 keeps progress")
+	assert(m.version == Config.Data.SchemaVersion and m.fusion.Neon ~= nil and m.receiptLedger.pending ~= nil, "reconciled to current schema")
+	local newer, why = Schema.migrate({ version = Config.Data.SchemaVersion + 1, money = 5 })
+	assert(newer == nil and why, "newer record is refused, not overwritten")
+	assert(Schema.migrate("garbage") == nil, "corrupt record is refused")
+	local fresh = assert(Schema.migrate(nil))
+	assert(fresh.money == Schema.default().money)
+	print(("  v1 -> v%d keeps money/seeds/lanes/biomes; newer and corrupt records refused (%s)"):format(Config.Data.SchemaVersion, why))
+end
+
+print("\n-- Duplication guards in the pure cores (A22) --")
+do
+	local FCore = require(Server.Fusion.Core)
+	local function slot() return { unlocked = true, state = "empty", runId = 0, startedAt = 0, endsAt = 0 } end
+	local prof = { plants = {}, nextItemId = 4, collection = {}, fusion = { Neon = slot(), Mega = slot() } }
+	for i = 1, 3 do
+		prof.plants[tostring(i)] = { id = tostring(i), species = "PeaPopper", rarity = "Common", size = "Medium", variant = "Normal" }
+	end
+	assert(not FCore.start(prof, "Neon", "PeaPopper", "Medium", 0), "3 items cannot start")
+	prof.plants["4"] = { id = "4", species = "PeaPopper", rarity = "Common", size = "Small", variant = "Normal" }
+	assert(not FCore.start(prof, "Neon", "PeaPopper", "Medium", 0), "mixed sizes cannot start")
+	assert(not FCore.start(prof, "Mega", "PeaPopper", "Medium", 0), "Mega refuses Normal inputs")
+	local n = 0
+	for _ in prof.plants do n += 1 end
+	assert(n == 4, "refused starts remove nothing")
+	assert(select(2, FCore.claim(prof, "Neon", 0, 1e9)) == false, "claim on empty grants nothing")
+	assert(select(2, FCore.claim(prof, "Neon", 99, 1e9)) == false, "forged runId grants nothing")
+	assert(not FCore.skip(prof, "Neon", 0), "skip on empty does nothing")
+	print("  short, mixed-size, wrong-tier starts refused with inventory intact; empty/forged claims grant nothing")
+end
+
+print("\n-- Collection index data --")
+do
+	local Discovery = require(Shared.Discovery)
+	local d = {
+		collection = { ["PeaPopper|Neon"] = true },
+		seeds = { Sunpetal = 1 },
+		expedition = {},
+		plants = { ["1"] = { species = "PeaPopper", variant = "Mega" } },
+		planted = {},
+	}
+	local set = Discovery.of(d)
+	assert(set["Sunpetal|Normal"] and set["PeaPopper|Mega"] and set["PeaPopper|Neon"])
+	assert(Discovery.best(set, "PeaPopper") == "Mega" and Discovery.best(set, "Sunpetal") == "Normal")
+	assert(Discovery.best(set, "ToxicVine") == nil)
+	print("  held seeds and plants count as discovered; best variant Mega > Neon > Normal; unseen is locked")
+end
+
+print("\n-- Sounds --")
+do
+	local Sounds = require(Shared.Sounds)
+	local missing = {}
+	for _, k in { "Dig", "Discover", "Plant", "Buy", "Error", "NightWarning", "WaveClear", "FusionDone", "GuardianWarning", "Music" } do
+		assert(Sounds.Ids[k] ~= nil, "sound table missing " .. k)
+		if Sounds.uri(k) == nil then table.insert(missing, k) end
+	end
+	assert(Sounds.uri("NoSuchSound") == nil)
+	print("  10 names present; no-op (id 0): " .. table.concat(missing, ", "))
 end
 '''
 
