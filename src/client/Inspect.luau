@@ -12,12 +12,14 @@ local Plants = require(ReplicatedStorage.Shared.Plants)
 local Rarities = require(ReplicatedStorage.Shared.Rarities)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
+local Purchases = require(script.Parent.Purchases)
 
 local Inspect = {}
 
 local panel: Frame? = nil
 local current: Model? = nil
 local fields: { [string]: TextLabel } = {}
+local growBtn: TextButton? = nil
 
 local function close()
 	current = nil
@@ -48,6 +50,12 @@ local function refresh()
 		fields.Status.Text = `{Economy.STAGES[stage]} · ready in {Format.clock(left)}`
 		fields.Income.Text = `Will earn {Format.money(income)}/s`
 	end
+	if growBtn then
+		local snap = State.snapshot
+		local credits = if snap then snap.credits.InstantGrow or 0 else 0
+		growBtn.Visible = stage ~= 4
+		growBtn.Text = if credits > 0 then `Instant Grow (use x{credits})` else "Instant Grow (Robux)"
+	end
 	local combat = def and def.Combat
 	fields.Role.Text = if combat and combat.Role ~= "Income"
 		then `Defense: {combat.Role}{combat.Damage > 0 and ` · {combat.Damage} dmg` or ""}`
@@ -66,7 +74,7 @@ end
 
 function Inspect.start()
 	local gui = Ui.screen("Inspect", Players.LocalPlayer:WaitForChild("PlayerGui"), 5)
-	local p = Ui.panel("Panel", UDim2.fromOffset(300, 262), gui)
+	local p = Ui.panel("Panel", UDim2.fromOffset(300, 314), gui)
 	p.AnchorPoint = Vector2.new(1, 0.5)
 	p.Position = UDim2.new(1, -12, 0.55, 0)
 	p.Visible = false
@@ -86,6 +94,26 @@ function Inspect.start()
 	line("Status", 22, false)
 	line("Income", 22, false)
 	line("Role", 22, false)
+
+	local grow = Ui.button("InstantGrow", "Instant Grow (Robux)", p)
+	grow.BackgroundColor3 = Ui.Warn
+	grow.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
+	grow.Position = UDim2.new(0, 12, 1, -(Ui.MinTouch * 2 + 20))
+	grow.Visible = false
+	growBtn = grow
+	grow.Activated:Connect(function()
+		local m = current
+		local snap = State.snapshot
+		if not m or not snap then
+			return
+		end
+		local key = m:GetAttribute("TileKey") :: string
+		if (snap.credits.InstantGrow or 0) > 0 then
+			State.remote("UseCredit"):FireServer("InstantGrow", key)
+		else
+			Purchases.offer("InstantGrow", key)
+		end
+	end)
 
 	local remove = Ui.button("Remove", "Dig Up", p)
 	remove.BackgroundColor3 = Ui.Danger

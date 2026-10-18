@@ -22,8 +22,36 @@ export type Snapshot = {
 	shovelTier: number,
 	bag: { [string]: number }, -- unbanked expedition seeds
 	defense: DefenseInfo?,
-	event: { name: string, endsAt: number }?,
+	event: EventInfo?,
+	water: { channel: boolean, sprinkler: boolean, pond: boolean },
+	fusion: { [string]: FusionSlot },
+	credits: { [string]: number },
+	collection: { [string]: boolean }, -- "species|variant"
+	growthBoostEndsAt: number,
 	persistent: boolean,
+}
+
+export type FusionSlot = {
+	unlocked: boolean,
+	state: string, -- "empty" | "fusing" (ready = fusing and now >= endsAt)
+	runId: number,
+	species: string?,
+	rarity: string?,
+	size: string?,
+	startedAt: number,
+	endsAt: number,
+}
+
+export type EventInfo = {
+	id: string,
+	name: string,
+	endsAt: number,
+	currency: string,
+	amount: number,
+	packName: string,
+	packCost: number,
+	packProduct: string,
+	quests: { { name: string, progress: number, goal: number, reward: number, done: boolean } },
 }
 
 export type DefenseInfo = {
@@ -48,6 +76,11 @@ function State.remote(name: string): RemoteEvent
 	return folder:WaitForChild(name) :: RemoteEvent
 end
 State.snapshot = nil :: Snapshot?
+
+-- Server clock for countdowns (os.time() on the client can drift).
+function State.now(): number
+	return workspace:GetServerTimeNow()
+end
 State.dayNight = nil :: DayNightInfo?
 
 local snapshotListeners: { (Snapshot) -> () } = {}

@@ -11,9 +11,12 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local Lanes = require(ReplicatedStorage.Shared.Lanes)
+local Plants = require(ReplicatedStorage.Shared.Plants)
+local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 local Notifications = require(script.Parent.Notifications)
+local Purchases = require(script.Parent.Purchases)
 
 local Shops = {}
 
@@ -71,6 +74,38 @@ local function promptHouse()
 	)
 end
 
+local function unlockNames(t: Upgrades.WaterTier): string
+	local names = {}
+	for _, id in t.Unlocks do
+		table.insert(names, if Plants.ById[id] then Plants.ById[id].Name else id)
+	end
+	return table.concat(names, ", ")
+end
+
+local function promptWater()
+	local snap = State.snapshot
+	if not snap then
+		return
+	end
+	local t = Upgrades.nextWater(snap.water)
+	if not t then
+		Notifications.show("You own every water upgrade.", "info")
+		return
+	end
+	if snap.money < t.Cost then
+		Notifications.show(`Not enough money. {t.Name} costs {Format.money(t.Cost)}.`, "error")
+		return
+	end
+	Ui.confirm(
+		`Build {t.Name}?`,
+		`{t.Description} Plants grow x{t.GrowthMultiplier} faster (stacks with other water). Lets you plant: {unlockNames(t)}.\nPrice: {Format.money(t.Cost)}`,
+		`Buy {Format.money(t.Cost)}`,
+		function()
+			State.remote("BuyWater"):FireServer(t.Key)
+		end
+	)
+end
+
 local function ownPlotOf(inst: Instance): boolean
 	local snap = State.snapshot
 	local node: Instance? = inst
@@ -86,7 +121,7 @@ end
 
 function Shops.start(bar: Frame)
 	local gui = Ui.screen("Upgrades", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
-	local p = Ui.panel("Panel", UDim2.fromOffset(340, 250), gui)
+	local p = Ui.panel("Panel", UDim2.fromOffset(340, 400), gui)
 	p.AnchorPoint = Vector2.new(0.5, 1)
 	p.Position = UDim2.new(0.5, 0, 1, -76)
 	p.Visible = false
@@ -112,6 +147,24 @@ function Shops.start(bar: Frame)
 	laneBtn.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
 	laneBtn.Position = UDim2.fromOffset(12, 186)
 	laneBtn.Activated:Connect(promptLane)
+
+	local waterInfo = Ui.label("WaterInfo", "", false, p)
+	waterInfo.Size = UDim2.new(1, -24, 0, 50)
+	waterInfo.Position = UDim2.fromOffset(12, 238)
+	waterInfo.TextWrapped = true
+	waterInfo.TextXAlignment = Enum.TextXAlignment.Left
+	local waterBtn = Ui.button("BuyWater", "Build Water", p)
+	waterBtn.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
+	waterBtn.Position = UDim2.fromOffset(12, 290)
+	waterBtn.Activated:Connect(promptWater)
+
+	local boostBtn = Ui.button("GrowthBoost", "2x Growth Boost (Robux)", p)
+	boostBtn.BackgroundColor3 = Ui.Warn
+	boostBtn.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
+	boostBtn.Position = UDim2.fromOffset(12, 342)
+	boostBtn.Activated:Connect(function()
+		Purchases.offer("GrowthBoost")
+	end)
 
 	local open = Ui.button("Upgrades", "Upgrades", bar)
 	open.LayoutOrder = 2
@@ -140,6 +193,16 @@ function Shops.start(bar: Frame)
 			laneInfo.Text = "All lanes unlocked"
 			laneBtn.Visible = false
 		end
+		local t = Upgrades.nextWater(s.water)
+		if t then
+			waterInfo.Text = `Water: {t.Name} {Format.money(t.Cost)} · x{t.GrowthMultiplier} growth · unlocks {unlockNames(t)}`
+			waterBtn.Visible = true
+		else
+			waterInfo.Text = "Water: channel, sprinklers and pond built"
+			waterBtn.Visible = false
+		end
+		local left = s.growthBoostEndsAt - State.now()
+		boostBtn.Text = if left > 0 then `Boost active {Format.duration(left)} · add 30m` else "2x Growth Boost (Robux)"
 	end)
 
 	-- Lane-sign prompts: only usable on your own plot.

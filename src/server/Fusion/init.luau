@@ -85,7 +85,7 @@ local function start(player: Player, machineId: string, species: string, size: s
 	Fusion.refresh(player)
 	local slot = (session.data.fusion :: any)[machineId] :: Core.Slot
 	local def = FusionData.Machines[machineId]
-	Net.notify(player, `{def.Name}: fusing 4 {Plants.ById[species].Name} ({size}). Ready in {Format.clock(slot.endsAt - slot.startedAt)}.`)
+	Net.notify(player, `{def.Name}: fusing 4 {Plants.ById[species].Name} ({size}). Ready in {Format.duration(slot.endsAt - slot.startedAt)}.`)
 end
 
 local function claim(player: Player, machineId: string, runId: number)

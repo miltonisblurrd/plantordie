@@ -69,7 +69,7 @@ local function apply(p: Data.Profile, key: string, arg: string?, bank: boolean):
 	elseif key == "GrowthBoost" then
 		local prod = Products.ByKey.GrowthBoost
 		p.growthBoostEndsAt = math.max(now, p.growthBoostEndsAt) + (prod.Seconds or 1800)
-		return `Growth Boost active for {Format.clock(p.growthBoostEndsAt - now)}.`
+		return `Growth Boost active for {Format.duration(p.growthBoostEndsAt - now)}.`
 	elseif key == "HalloweenPack" then
 		local e = Events.ById[Products.ByKey.HalloweenPack.Event or ""]
 		if e then

@@ -24,4 +24,17 @@ function Format.clock(seconds: number): string
 	return string.format("%d:%02d", seconds // 60, seconds % 60)
 end
 
+-- Human duration: "45s", "2m 05s", "3h 00m", "2d 4h".
+function Format.duration(seconds: number): string
+	seconds = math.max(0, math.floor(seconds))
+	if seconds < 60 then
+		return `{seconds}s`
+	elseif seconds < 3600 then
+		return string.format("%dm %02ds", seconds // 60, seconds % 60)
+	elseif seconds < 86400 then
+		return string.format("%dh %02dm", seconds // 3600, (seconds % 3600) // 60)
+	end
+	return string.format("%dd %dh", seconds // 86400, (seconds % 86400) // 3600)
+end
+
 return Format

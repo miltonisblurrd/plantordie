@@ -18,6 +18,10 @@ local Danger = require(script.Parent.Danger)
 local Shovel = require(script.Parent.Shovel)
 local Atmosphere = require(script.Parent.Atmosphere)
 local Defense = require(script.Parent.Defense)
+local Purchases = require(script.Parent.Purchases)
+local FusionPanel = require(script.Parent.FusionPanel)
+local EventShop = require(script.Parent.EventShop)
+local Collection = require(script.Parent.Collection)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
 local bar = Instance.new("Frame")
@@ -25,7 +29,7 @@ bar.Name = "Bar"
 bar.BackgroundTransparency = 1
 bar.AnchorPoint = Vector2.new(0.5, 1)
 bar.Position = UDim2.new(0.5, 0, 1, -12)
-bar.Size = UDim2.fromOffset(380, 52)
+bar.Size = UDim2.fromOffset(620, 52)
 bar.Parent = barGui
 Ui.list(bar, Enum.FillDirection.Horizontal, 10).HorizontalAlignment = Enum.HorizontalAlignment.Center
 
@@ -43,4 +47,8 @@ Danger.start()
 Shovel.start(bar)
 Atmosphere.start()
 Defense.start()
+Purchases.start()
+FusionPanel.start()
+Collection.start(bar)
+EventShop.start(bar)
 State.start()
