@@ -148,6 +148,7 @@ end
 function methods:PivotTo() end
 function methods:Destroy() end
 function methods:Clone() return self end
+function methods:CreatePath() return {} end
 INST.__index = function(o, k)
 	if methods[k] then return methods[k] end
 	local child = methods.FindFirstChild(o, k)
@@ -685,7 +686,9 @@ do
 	assert(Schema.migrate("garbage") == nil, "corrupt record is refused")
 	local fresh = assert(Schema.migrate(nil))
 	assert(fresh.money == Schema.default().money)
-	print(("  v1 -> v%d keeps money/seeds/lanes/biomes; newer and corrupt records refused (%s)"):format(Config.Data.SchemaVersion, why))
+	local v4 = assert(Schema.migrate({ version = 4, nextItemId = 7, planted = { ["1|1"] = { species = "PeaPopper", rarity = "Common", size = "Medium", variant = "Normal", plantedAt = 0 } } }))
+	assert(v4.planted["1|1"].uid == "7" and v4.nextItemId == 8 and v4.purchaseIntent ~= nil, "v4 planted records get a uid")
+	print(("  v1 -> v%d keeps money/seeds/lanes/biomes; v4 plants get uids; newer and corrupt records refused (%s)"):format(Config.Data.SchemaVersion, why))
 end
 
 print("\n-- Duplication guards in the pure cores (A22) --")
@@ -730,12 +733,54 @@ print("\n-- Sounds --")
 do
 	local Sounds = require(Shared.Sounds)
 	local missing = {}
-	for _, k in { "Dig", "Discover", "Plant", "Buy", "Error", "NightWarning", "WaveClear", "FusionDone", "GuardianWarning", "Music" } do
+	for _, k in { "Dig", "Discover", "Plant", "Buy", "Click", "Error", "NightWarning", "WaveClear", "FusionDone", "GuardianWarning", "Music" } do
 		assert(Sounds.Ids[k] ~= nil, "sound table missing " .. k)
 		if Sounds.uri(k) == nil then table.insert(missing, k) end
 	end
 	assert(Sounds.uri("NoSuchSound") == nil)
-	print("  10 names present; no-op (id 0): " .. table.concat(missing, ", "))
+	print("  11 names present; no-op (id 0): " .. table.concat(missing, ", "))
+end
+
+print("\n-- Instant Grow targets one saved plant uid --")
+do
+	local PCore = require(Server.Purchases.Core)
+	local function rec(uid) return { uid = uid, species = "PeaPopper", rarity = "Common", size = "Medium", variant = "Normal", plantedAt = 1000 } end
+	local p: any = { planted = { ["1|1"] = rec("10"), ["1|2"] = rec("11") }, water = {}, growthBoostEndsAt = 0,
+		credits = {}, purchaseIntent = { InstantGrow = "10" }, receiptLedger = { order = {}, seen = {}, pending = {} } }
+	local function grantIG(_key, arg)
+		if not PCore.instantGrow(p, arg, 1001) then p.credits.InstantGrow = (p.credits.InstantGrow or 0) + 1 end
+	end
+	assert(PCore.process(p.receiptLedger, "IG0", "InstantGrow", p.purchaseIntent.InstantGrow, function() return false end, grantIG) == "NotProcessedYet")
+	assert(not p.planted["1|1"].matured and not p.credits.InstantGrow, "failed save grants nothing")
+	p.planted["1|1"] = nil
+	assert(PCore.process(p.receiptLedger, "IG1", "InstantGrow", p.purchaseIntent.InstantGrow, function() return true end, grantIG) == "Granted")
+	assert(not p.planted["1|2"].matured, "no other plant finishes")
+	assert(p.credits.InstantGrow == 1, "missing target banks one credit")
+	assert(PCore.instantGrow(p, "11", 1001) == "1|2" and p.planted["1|2"].matured, "credit applies to a chosen growing plant")
+	assert(PCore.instantGrow(p, nil, 1001) == nil, "no intent finishes nothing")
+	print("  target gone -> 1 InstantGrow credit, other plant untouched; failed save grants nothing; credit applies later")
+end
+
+print("\n-- Halloween guardian exists only while the event is active --")
+do
+	local Events = require(Shared.Events)
+	local Guardians = require(Shared.Guardians)
+	local e = Events.ById.Halloween2026
+	assert(e.Guardian and Guardians.Event.Halloween2026, "event zone and guardian def")
+	assert(Events.guardianEvent(e.StartsAt + 60) == "Halloween2026")
+	assert(Events.guardianEvent(e.StartsAt - 60) == nil and Events.guardianEvent(e.EndsAt + 60) == nil)
+	local gm = Guardians.ByBiome[Biomes.List[1].Id]
+	local hg = Guardians.Event.Halloween2026
+	assert(hg.ChaseSpeed > gm.ChaseSpeed and hg.DetectRange > gm.DetectRange, "spookier than Green Meadows")
+	local ok, GuardianAI = pcall(require, Server.GuardianAI)
+	assert(ok, "GuardianAI loads: " .. tostring(GuardianAI))
+	assert(GuardianAI.eventGuardianCount() == 0)
+	GuardianAI.setEventGuardian(Events.guardianEvent(e.StartsAt + 60))
+	assert(GuardianAI.eventGuardianCount() == 1, "spawned while active")
+	GuardianAI.setEventGuardian(Events.guardianEvent(e.EndsAt + 60))
+	assert(GuardianAI.eventGuardianCount() == 0, "removed when the event ends")
+	print(("  active -> 1 guardian, off -> 0; walk %.1f chase %.1f detect %d leash %d (Green Meadows %.1f/%.1f/%d/%d)"):format(
+		hg.WalkSpeed, hg.ChaseSpeed, hg.DetectRange, hg.LeashRange, gm.WalkSpeed, gm.ChaseSpeed, gm.DetectRange, gm.LeashRange))
 end
 '''
 

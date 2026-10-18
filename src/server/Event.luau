@@ -15,6 +15,7 @@ local Plants = require(ReplicatedStorage.Shared.Plants)
 local Data = require(script.Parent.Data)
 local Defense = require(script.Parent.Defense)
 local Fusion = require(script.Parent.Fusion)
+local GuardianAI = require(script.Parent.GuardianAI)
 local Net = require(script.Parent.Net)
 local Sync = require(script.Parent.Sync)
 
@@ -160,6 +161,7 @@ local function apply(e: Events.Event?)
 		end
 	end
 	setFog(e ~= nil)
+	GuardianAI.setEventGuardian(if e and e.Guardian then e.Id else nil)
 	ReplicatedStorage:SetAttribute("ActiveEvent", if e then e.Id else nil)
 	for _, player in Players:GetPlayers() do
 		Sync.push(player)

@@ -50,6 +50,13 @@ local list: { Guardian } = {
 	g("ForbiddenBloom", "The Gardener Below", "Tall", "#2B0A12", "#FF1E56", "#FFD700", 1.4, 10.5, 19, 60, 150, 0.5, 0.8),
 }
 
+-- Event guardians, keyed by Events id. Only exist while that event is active. Slightly
+-- spookier than Green Meadows (faster, sees further) but far from endgame. LeashRange is from
+-- the event zone centre.
+local event: { [string]: Guardian } = {
+	Halloween2026 = g("halloween", "Headless Haunt", "Floating", "#2E1A47", "#FF7518", "#B6FF3B", 1.1, 7.5, 14, 34, 60, 1.1, 0.1),
+}
+
 local byBiome: { [string]: Guardian } = {}
 for _, gd in list do
 	byBiome[gd.Biome] = gd
@@ -58,4 +65,5 @@ end
 return {
 	List = list,
 	ByBiome = byBiome,
+	Event = event,
 }

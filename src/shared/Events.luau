@@ -16,6 +16,8 @@ export type Event = {
 	DigCooldown: number,
 	Pack: { Name: string, Cost: number, Seeds: number, Product: string, Odds: { Odds } },
 	Quests: { Quest },
+	-- Event guardian zone in the hub (Guardians.Event[Id] holds its stats). Circle on the ground.
+	Guardian: { Center: Vector3, Radius: number }?,
 }
 
 local Events = {
@@ -52,6 +54,8 @@ local Events = {
 				{ Id = "nights", Name = "Survive 3 nights", Stat = "nights", Goal = 3, Reward = 75 },
 				{ Id = "fuse", Name = "Claim 1 fusion", Stat = "fuse", Goal = 1, Reward = 100 },
 			},
+			-- Around the haunted shack (58, 48) and pumpkin patch (32, 66); clear of the fountain.
+			Guardian = { Center = Vector3.new(45, 0, 57), Radius = 42 },
 		},
 	} :: { Event },
 	ById = {} :: { [string]: Event },
@@ -68,6 +72,12 @@ function Events.active(now: number): Event?
 		end
 	end
 	return nil
+end
+
+-- Id of the event whose guardian should exist at `now`, or nil.
+function Events.guardianEvent(now: number): string?
+	local e = Events.active(now)
+	return if e and e.Guardian then e.Id else nil
 end
 
 -- Percent per plant, in table order; sums to 100.

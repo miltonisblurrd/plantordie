@@ -9,6 +9,7 @@
 --              guardian made no headway for StuckSeconds. Then a short cooldown, then patrol.
 --   Catch   -> teleport the player home and clear ONLY their unbanked expedition bag.
 -- Guardians in biomes with no players skip their update entirely (sleep).
+-- A seasonal event may add one extra guardian over its own zone while the event is active.
 
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
@@ -18,6 +19,7 @@ local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local GuardianDefs = require(ReplicatedStorage.Shared.Guardians)
 local Sounds = require(ReplicatedStorage.Shared.Sounds)
+local EventDefs = require(ReplicatedStorage.Shared.Events)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
 local Expedition = require(script.Parent.Expedition)
@@ -30,7 +32,13 @@ local G = Config.Guardian
 type State = "Patrol" | "Chase" | "Cooldown"
 type Guardian = {
 	def: GuardianDefs.Guardian,
-	info: Biomes.BiomeInfo,
+	zone: string,
+	center: Vector3,
+	patrolPts: { Vector3 },
+	danger: { { center: Vector3, radius: number } },
+	inRegion: (Vector3) -> boolean,
+	inSafe: (Vector3) -> boolean,
+	clamp: (Vector3) -> Vector3,
 	model: Model,
 	path: Path,
 	pos: Vector3,
@@ -54,6 +62,9 @@ type Visitor = { player: Player, pos: Vector3, root: BasePart }
 local GuardianAI = {}
 
 local guardians: { Guardian } = {}
+local eventGuardian: Guardian? = nil
+local eventGuardianId: string? = nil
+local rootFolder: Instance? = nil
 
 local function flat(v: Vector3): Vector3
 	return Vector3.new(v.X, 0, v.Z)
@@ -68,11 +79,11 @@ local function place(g: Guardian)
 end
 
 -- Keeps the guardian inside its biome walls even on a direct (non-path) move.
-local function clampToBiome(g: Guardian, pos: Vector3): Vector3
-	local lp = g.info.cf:PointToObjectSpace(pos)
+local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
+	local lp = info.cf:PointToObjectSpace(pos)
 	local half = Config.Biome.Size / 2 - 4
 	local clamped = Vector3.new(math.clamp(lp.X, -half, half), 0, math.clamp(lp.Z, -half, half))
-	local world = g.info.cf:PointToWorldSpace(clamped)
+	local world = info.cf:PointToWorldSpace(clamped)
 	return Vector3.new(world.X, groundY(), world.Z)
 end
 
@@ -84,14 +95,14 @@ local function step(g: Guardian, goal: Vector3, speed: number, dt: number): bool
 		return true
 	end
 	local dir = delta / dist
-	g.pos = clampToBiome(g, g.pos + dir * math.min(dist, speed * dt))
+	g.pos = g.clamp(g.pos + dir * math.min(dist, speed * dt))
 	g.facing = dir
 	place(g)
 	return false
 end
 
 local function inDanger(g: Guardian, pos: Vector3): boolean
-	for _, zone in g.info.skeleton.danger do
+	for _, zone in g.danger do
 		if flat(pos - zone.center).Magnitude <= zone.radius then
 			return true
 		end
@@ -173,10 +184,9 @@ local function chase(g: Guardian, dt: number, now: number)
 		lose(g, now)
 		return
 	end
-	local id = g.info.biome.Id
 	local tpos = root.Position
-	if not Biomes.inRegion(id, tpos) or Biomes.inSafeZone(id, tpos)
-		or flat(tpos - g.info.cf.Position).Magnitude > g.def.LeashRange then
+	if not g.inRegion(tpos) or g.inSafe(tpos)
+		or flat(tpos - g.center).Magnitude > g.def.LeashRange then
 		lose(g, now)
 		return
 	end
@@ -185,7 +195,7 @@ local function chase(g: Guardian, dt: number, now: number)
 		return
 	end
 
-	local goal = clampToBiome(g, tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict)
+	local goal = g.clamp(tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict)
 	if not g.computing and now - g.lastCompute >= g.def.RecomputeSeconds then
 		g.lastCompute = now
 		task.spawn(computePath, g, goal, target)
@@ -208,7 +218,7 @@ local function chase(g: Guardian, dt: number, now: number)
 end
 
 local function patrol(g: Guardian, dt: number)
-	local pts = g.info.skeleton.patrol
+	local pts = g.patrolPts
 	if step(g, pts[g.patrolIdx], g.def.WalkSpeed, dt) then
 		g.patrolIdx = g.patrolIdx % #pts + 1
 	end
@@ -217,9 +227,8 @@ end
 local function detect(g: Guardian, visitors: { Visitor }, now: number)
 	local best: Visitor? = nil
 	local bestD = math.huge
-	local id = g.info.biome.Id
 	for _, v in visitors do
-		if not Biomes.inSafeZone(id, v.pos) then
+		if not g.inSafe(v.pos) then
 			local d = flat(v.pos - g.pos).Magnitude
 			local range = if inDanger(g, v.pos) then g.def.DetectRange * 2.5 else g.def.DetectRange
 			if d <= range and d < bestD then
@@ -234,19 +243,25 @@ end
 
 local function tick(dt: number)
 	local now = os.clock()
-	local byBiome: { [string]: { Visitor } } = {}
+	local all: { Visitor } = {}
 	for _, player in Players:GetPlayers() do
 		local root = Biomes.rootOf(player)
 		if root and Data.isLoaded(player) then
-			local id = Biomes.regionOf(root.Position)
-			if id then
-				byBiome[id] = byBiome[id] or {}
-				table.insert(byBiome[id], { player = player, pos = root.Position, root = root })
-			end
+			table.insert(all, { player = player, pos = root.Position, root = root })
 		end
 	end
-	for _, g in guardians do
-		local visitors = byBiome[g.info.biome.Id]
+	local active = table.clone(guardians)
+	if eventGuardian then
+		table.insert(active, eventGuardian)
+	end
+	for _, g in active do
+		local visitors: { Visitor }? = nil
+		for _, v in all do
+			if g.inRegion(v.pos) then
+				visitors = visitors or {}
+				table.insert(visitors :: { Visitor }, v)
+			end
+		end
 		if g.state == "Chase" then
 			g.sleeping = false
 			chase(g, dt, now)
@@ -275,37 +290,123 @@ function GuardianAI.awakeCount(): number
 	return n
 end
 
-function GuardianAI.start(worldFolder: Instance)
+local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
+	zone: string, center: Vector3, patrolPts: { Vector3 }, danger: { { center: Vector3, radius: number } },
+	inRegion: (Vector3) -> boolean, inSafe: (Vector3) -> boolean, clamp: (Vector3) -> Vector3,
+}): Guardian
+	local start = fields.patrolPts[1]
+	local pos = Vector3.new(start.X, groundY(), start.Z)
+	local model = GuardianRig.build(def, CFrame.new(pos), folder)
+	local alert = Instance.new("Sound")
+	alert.Name = "Alert"
+	alert.SoundId = Sounds.uri("GuardianWarning") or ""
+	alert.Volume = 1
+	alert.RollOffMaxDistance = 120
+	alert.Parent = model.PrimaryPart
+	local g: Guardian = {
+		def = def, zone = fields.zone, center = fields.center, patrolPts = fields.patrolPts, danger = fields.danger,
+		inRegion = fields.inRegion, inSafe = fields.inSafe, clamp = fields.clamp, model = model,
+		path = PathfindingService:CreatePath({ AgentRadius = 2 * def.Scale, AgentHeight = 6 * def.Scale, AgentCanJump = false }),
+		pos = pos, facing = Vector3.new(0, 0, -1), state = "Patrol", patrolIdx = 2,
+		target = nil, waypoints = {}, wpIdx = 1, lastCompute = 0, computing = false,
+		stuckFrom = pos, stuckAt = 0, cooldownUntil = 0, sleeping = true, alert = alert,
+	}
+	place(g)
+	return g
+end
+
+local function folderOf(worldFolder: Instance?): Instance
+	local existing = rootFolder
+	if existing and existing.Parent then
+		return existing
+	end
 	local folder = Instance.new("Folder")
 	folder.Name = "Guardians"
-	folder.Parent = worldFolder
+	folder.Parent = worldFolder or workspace
+	rootFolder = folder
+	return folder
+end
+
+-- Spawns the guardian for `eventId` (if that event defines one) or removes the current one.
+function GuardianAI.setEventGuardian(eventId: string?)
+	local def = eventId and GuardianDefs.Event[eventId]
+	local ev = eventId and EventDefs.ById[eventId]
+	local zoneDef = ev and ev.Guardian
+	if eventGuardianId == eventId and (eventGuardian ~= nil) == (def ~= nil) then
+		return
+	end
+	local old = eventGuardian
+	if old then
+		if old.target then
+			lose(old, os.clock())
+		end
+		old.model:Destroy()
+		eventGuardian = nil
+	end
+	eventGuardianId = nil
+	if not (def and zoneDef and eventId) then
+		return
+	end
+	local c = Vector3.new(zoneDef.Center.X, 0, zoneDef.Center.Z)
+	local radius = zoneDef.Radius
+	local inner = radius * 0.6
+	local pts = {}
+	for i = 0, 3 do
+		local a = i * math.pi / 2
+		table.insert(pts, c + Vector3.new(math.cos(a) * inner, 0, math.sin(a) * inner))
+	end
+	local hubSafe = Config.Bank.HubRadius
+	eventGuardian = spawn(def, folderOf(nil), {
+		zone = eventId, center = c, patrolPts = pts, danger = {},
+		inRegion = function(pos)
+			return flat(pos - c).Magnitude <= radius
+		end,
+		inSafe = function(pos)
+			return flat(pos).Magnitude <= hubSafe
+		end,
+		clamp = function(pos)
+			local d = flat(pos - c)
+			if d.Magnitude > radius - 2 then
+				d = d.Unit * (radius - 2)
+			end
+			return Vector3.new(c.X + d.X, groundY(), c.Z + d.Z)
+		end,
+	})
+	eventGuardianId = eventId
+end
+
+function GuardianAI.eventGuardianCount(): number
+	return if eventGuardian then 1 else 0
+end
+
+function GuardianAI.start(worldFolder: Instance)
+	local folder = folderOf(worldFolder)
 	for _, biome in BiomeData.List do
 		local def = GuardianDefs.ByBiome[biome.Id]
 		local info = Biomes.info(biome.Id)
 		if def and info then
-			local start = info.skeleton.patrol[1]
-			local pos = Vector3.new(start.X, groundY(), start.Z)
-			local model = GuardianRig.build(def, CFrame.new(pos), folder)
-			local alert = Instance.new("Sound")
-			alert.Name = "Alert"
-			alert.SoundId = Sounds.uri("GuardianWarning") or ""
-			alert.Volume = 1
-			alert.RollOffMaxDistance = 120
-			alert.Parent = model.PrimaryPart
-			local g: Guardian = {
-				def = def, info = info, model = model,
-				path = PathfindingService:CreatePath({ AgentRadius = 2 * def.Scale, AgentHeight = 6 * def.Scale, AgentCanJump = false }),
-				pos = pos, facing = Vector3.new(0, 0, -1), state = "Patrol", patrolIdx = 2,
-				target = nil, waypoints = {}, wpIdx = 1, lastCompute = 0, computing = false,
-				stuckFrom = pos, stuckAt = 0, cooldownUntil = 0, sleeping = true, alert = alert,
-			}
-			place(g)
-			table.insert(guardians, g)
+			local id = biome.Id
+			table.insert(guardians, spawn(def, folder, {
+				zone = id, center = info.cf.Position, patrolPts = info.skeleton.patrol, danger = info.skeleton.danger,
+				inRegion = function(pos)
+					return Biomes.inRegion(id, pos)
+				end,
+				inSafe = function(pos)
+					return Biomes.inSafeZone(id, pos)
+				end,
+				clamp = function(pos)
+					return clampToBiome(info, pos)
+				end,
+			}))
 		end
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		for _, g in guardians do
+		local active = table.clone(guardians)
+		if eventGuardian then
+			table.insert(active, eventGuardian)
+		end
+		for _, g in active do
 			if g.target == player then
 				lose(g, os.clock())
 			end
