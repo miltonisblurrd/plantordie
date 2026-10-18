@@ -1,47 +1,58 @@
--- Flip Debug to true for a short cycle while testing alone in Studio.
-local Debug = false
+--!strict
+-- Global tuning. Every number the server uses lives here or in a sibling data table.
 
-return {
-	Debug = Debug,
-	GameName = "PLANT or DIE",
-	DataStoreName = "PlantOrDie_v2",
-	GrowSeconds = { Common = 30, Rare = 60, Epic = 90, Legendary = 120 },
-	EvolveCost = { Common = 8, Rare = 16, Epic = 28, Legendary = 45 },
-
-	DayLength = Debug and 75 or 240,
-	WarningLength = Debug and 15 or 20,
-	NightLength = Debug and 45 or 120,
-
-	StartingCoins = 300,
-	RollCost = 100,
-	MaxFollowers = 3,
-	PlotCount = 6,
-	TileCount = 5,
-	FifthTileHouseLevel = 2,
-	MaxHouseLevel = 5,
-	StunSeconds = 60,
-	IncomeInterval = 1,
-	AutosaveInterval = 60,
-
-	-- Cost to reach this house level. Index is the level you are buying.
-	UpgradeCost = {
-		[2] = 250,
-		[3] = 750,
-		[4] = 2000,
-		[5] = 5000,
+local Config = {
+	Data = {
+		StoreName = "PlantOrDie_Profiles_v2",
+		KeyPrefix = "player_",
+		SchemaVersion = 1,
+		AutosaveSeconds = 60,
+		LockStaleSeconds = 30 * 60,
+		Retries = 3,
+		RetryBaseDelay = 1, -- seconds; doubles each attempt
+		ReceiptLedgerCap = 200,
+		BindToCloseTimeout = 25,
+		KickMessage = "We couldn't load your garden safely, so we stopped before anything was lost. Please rejoin in a minute!",
 	},
-	IncomeMultiplier = {
-		[1] = 1,
-		[2] = 1.5,
-		[3] = 2,
-		[4] = 3,
-		[5] = 4,
+
+	Start = {
+		Money = 100,
+		HouseTier = 1,
+		LanesUnlocked = 3,
+		ShovelTier = 1,
 	},
-	HouseHealth = {
-		[1] = 100,
-		[2] = 160,
-		[3] = 230,
-		[4] = 320,
-		[5] = 450,
+
+	World = {
+		HubRadius = 95,
+		GateRingRadius = 118,
+		PlotRingRadius = 300,
+		PlotCount = 8,
+		BiomeAnchorRadius = 1400,
+		GroundY = 0,
+	},
+
+	Plot = {
+		Width = 170, -- along lanes (local X)
+		Depth = 110, -- across lanes (local Z)
+		TileSize = 8,
+		Lanes = 7,
+		Columns = 9,
+		GardenOriginX = -42, -- local X of column 1's left edge
+		HouseX = -66, -- local X of house centre
+		ZombieSpawnX = 70,
+	},
+
+	DayNight = {
+		DaySeconds = 240,
+		NightSeconds = 120,
+		DayClockStart = 6.5,
+		DayClockEnd = 18.5,
+		NightClockEnd = 30.5, -- wraps past midnight to 06:30
+	},
+
+	Sync = {
+		AreaCheckSeconds = 0.5,
 	},
 }
+
+return Config
