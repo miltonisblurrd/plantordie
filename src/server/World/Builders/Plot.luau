@@ -10,7 +10,6 @@ local Lanes = require(ReplicatedStorage.Shared.Lanes)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Parts = require(script.Parent.Parent.Parts)
 local House = require(script.Parent.House)
-local Machine = require(script.Parent.Machine)
 
 local P = Config.Plot
 local T = P.TileSize
@@ -174,7 +173,8 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	bb.Name = "OwnerSign"
 	bb.Size = UDim2.fromOffset(260, 56)
 	bb.AlwaysOnTop = true
-	bb.MaxDistance = 400
+	bb.Enabled = false
+	bb.MaxDistance = 120
 	bb.LightInfluence = 0
 	bb.Parent = signAnchor
 	local label = Instance.new("TextLabel")
@@ -184,7 +184,7 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	label.Font = Enum.Font.FredokaOne
 	label.TextScaled = true
 	label.TextColor3 = Color3.new(1, 1, 1)
-	label.Text = "Empty Plot"
+	label.Text = ""
 	label.Parent = bb
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
@@ -196,8 +196,36 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	stroke.Parent = label
 	refs.ownerLabel = label
 
-	refs.machines.Neon = Machine.build("Neon", index, cf * CFrame.new(-6, 0, -42), model)
-	refs.machines.Mega = Machine.build("Mega", index, cf * CFrame.new(18, 0, -42), model)
+	local portalCf = cf * CFrame.new(P.ZombieSpawnX, 0, 0)
+	local portal = Parts.model("Portal", model)
+	local ring = Parts.make({
+		Name = "Ring", Parent = portal, Color = Color3.fromRGB(120, 40, 220), Material = Enum.Material.Neon,
+		Shape = Enum.PartType.Cylinder, CanCollide = false,
+		Size = Vector3.new(0.6, 10, 10),
+		CFrame = portalCf * CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, math.rad(90)),
+	})
+	Parts.make({
+		Name = "Mouth", Parent = portal, Color = Color3.fromRGB(20, 0, 40), Material = Enum.Material.Neon,
+		Shape = Enum.PartType.Cylinder, CanCollide = false,
+		Size = Vector3.new(0.4, 7, 7),
+		CFrame = ring.CFrame,
+	})
+	local swirl = Instance.new("ParticleEmitter")
+	swirl.Rate = 18
+	swirl.Lifetime = NumberRange.new(0.8, 1.4)
+	swirl.Speed = NumberRange.new(1, 3)
+	swirl.SpreadAngle = Vector2.new(180, 180)
+	swirl.LightEmission = 0.8
+	swirl.Size = NumberSequence.new(0.6, 0)
+	swirl.Color = ColorSequence.new(Color3.fromRGB(180, 80, 255), Color3.fromRGB(255, 60, 80))
+	swirl.Parent = ring
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "PortalPrompt"
+	prompt.ActionText = "Upgrade"
+	prompt.ObjectText = "Portal"
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = ring
 
 	local water = Instance.new("Folder")
 	water.Name = "Water"

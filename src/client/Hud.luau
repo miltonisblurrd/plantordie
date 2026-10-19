@@ -36,7 +36,8 @@ function Hud.start()
 
 	-- Top-left: money and income.
 	local money = Ui.panel("Money", UDim2.fromOffset(230, 84), gui)
-	money.Position = UDim2.fromOffset(12, 12)
+	money.AnchorPoint = Vector2.new(0.5, 0)
+	money.Position = UDim2.new(0.5, 0, 0, 8)
 	padded(money, 8)
 	Ui.list(money, Enum.FillDirection.Vertical, 2)
 	local moneyText = Ui.label("Amount", "$0", true, row("AmountRow", money, 1, 40))

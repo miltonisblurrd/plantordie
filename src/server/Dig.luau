@@ -15,7 +15,16 @@ local Data = require(script.Parent.Data)
 local Expedition = require(script.Parent.Expedition)
 local Net = require(script.Parent.Net)
 
-type Spot = { id: string, biomeId: string, position: Vector3, requiredTier: number, model: Model, availableAt: number }
+type Spot = {
+	id: string,
+	biomeId: string,
+	position: Vector3,
+	requiredTier: number,
+	model: Model,
+	availableAt: number,
+	hp: number,
+	maxHp: number,
+}
 
 local Dig = {}
 
@@ -61,14 +70,15 @@ local function handle(player: Player, spotId: string)
 		return
 	end
 	local shovel = Upgrades.Shovels[session.data.shovelTier] or Upgrades.Shovels[1]
-	if shovel.ToughTier < spot.requiredTier then
-		Net.notify(player, `Tough soil! You need a tier {spot.requiredTier} shovel.`, "warn")
-		return
-	end
 	if (lastDig[player] or 0) + shovel.DigSeconds > now then
 		return
 	end
 	lastDig[player] = now
+	spot.hp -= shovel.Damage
+	if spot.hp > 0 then
+		Net.notify(player, `Dirt {math.ceil(spot.hp)}/{spot.maxHp}. A stronger shovel breaks it faster.`, "warn")
+		return
+	end
 
 	local drop = DropTables.roll(spot.biomeId, shovel.LuckBonus, rng:NextNumber())
 	if not drop or not Plants.ById[drop.Plant] then
@@ -77,6 +87,7 @@ local function handle(player: Player, spotId: string)
 	spot.availableAt = now + Config.Dig.RespawnSeconds
 	setAvailable(spot, false)
 	task.delay(Config.Dig.RespawnSeconds, function()
+		spot.hp = spot.maxHp
 		setAvailable(spot, true)
 	end)
 	if Expedition.add(player, drop.Plant, 1) then
@@ -89,9 +100,14 @@ function Dig.start()
 		local info = Biomes.info(biome.Id)
 		if info then
 			for _, s in info.skeleton.spots do
+				local hp = biome.Index * Config.Biome.DirtHpPerIndex
+				if s.requiredTier > 1 then
+					hp = math.floor(hp * Config.Biome.ToughHpMultiplier)
+				end
 				spots[s.id] = {
 					id = s.id, biomeId = biome.Id, position = s.cf.Position,
 					requiredTier = s.requiredTier, model = s.model, availableAt = 0,
+					hp = hp, maxHp = hp,
 				}
 			end
 		end

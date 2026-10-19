@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Parts = require(script.Parent.Parent.Parts)
 local Layout = require(script.Parent.Parent.Layout)
+local Machine = require(script.Parent.Machine)
 
 local W = Config.World
 
@@ -24,15 +25,15 @@ end
 function Hub.build(parent: Instance): Model
 	local m = Parts.model("Hub", parent)
 
-	local outer = Config.Biome.RingRadius + Config.Biome.Size * 0.75
+	local extent = Layout.mapExtent()
 	Parts.make({
 		Name = "Baseplate", Parent = m, Color = Color3.fromRGB(78, 176, 70), Material = Enum.Material.Grass,
-		Size = Vector3.new(math.min(outer * 2, 2048), 2, math.min(outer * 2, 2048)), CFrame = CFrame.new(0, W.GroundY - 1.2, 0),
+		Size = Vector3.new(extent.X, 2, extent.Z + 120),
+		CFrame = CFrame.new(0, W.GroundY - 1.2, extent.Z / 2 - 40),
 	})
-	disc("GateRing", W.GateRingRadius + 14, W.GroundY + 0.1, 1, Color3.fromRGB(196, 186, 168), nil, m)
 	disc("Plaza", W.HubRadius, W.GroundY + 0.2, 1, Color3.fromRGB(110, 222, 92), Enum.Material.Grass, m)
 
-	-- Fountain centrepiece.
+	-- Fountain centrepiece, behind the plot row.
 	disc("FountainBase", 14, W.GroundY + 2.2, 2, Color3.fromRGB(170, 176, 186), nil, m)
 	disc("FountainWater", 12, W.GroundY + 2.4, 0.4, Color3.fromRGB(90, 190, 255), Enum.Material.Neon, m)
 	Parts.make({
@@ -43,6 +44,12 @@ function Hub.build(parent: Instance): Model
 		Name = "TitleBoard", Parent = m, Color = Color3.fromHex("#1E2A22"),
 		Size = Vector3.new(20, 5, 0.6), CFrame = CFrame.new(0, W.GroundY + 13, 0),
 	})
+	for _, name in { "Plaza", "FountainBase", "FountainWater", "FountainPillar", "TitleBoard" } do
+		local part = m:FindFirstChild(name)
+		if part and part:IsA("BasePart") then
+			part.CFrame = part.CFrame + Vector3.new(0, 0, -70)
+		end
+	end
 	Parts.surfaceText(title, Enum.NormalId.Front, "PLANT OR DIE", Color3.fromHex("#3FBF4A"))
 	Parts.surfaceText(title, Enum.NormalId.Back, "PLANT OR DIE", Color3.fromHex("#3FBF4A"))
 
@@ -51,39 +58,39 @@ function Hub.build(parent: Instance): Model
 	spawn.Anchored = true
 	spawn.Neutral = true
 	spawn.Size = Vector3.new(10, 1, 10)
-	spawn.CFrame = CFrame.new(0, W.GroundY + 0.7, 28)
+	spawn.CFrame = CFrame.new(0, W.GroundY + 0.7, -70)
 	spawn.Color = Color3.fromHex("#3FBF4A")
 	spawn.Material = Enum.Material.SmoothPlastic
 	spawn.Duration = 0
 	spawn.Parent = m
 
-	-- Paths from the gate ring to every plot's front edge.
-	local pathLen = W.PlotRingRadius - Config.Plot.Depth / 2 - (W.GateRingRadius + 14) + 2
-	local pathMid = W.GateRingRadius + 14 + pathLen / 2 - 1
-	for i = 1, W.PlotCount do
-		local a = math.rad(Layout.plotAngle(i))
-		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
-		local pos = dir * pathMid + Vector3.new(0, W.GroundY - 0.05, 0)
-		Parts.make({
-			Name = "PlotPath", Parent = m, Color = Color3.fromRGB(196, 186, 168),
-			Size = Vector3.new(12, 0.3, pathLen), CFrame = CFrame.lookAt(pos, pos + dir),
-		})
+	-- One shared path from the plaza to the middle of the plot row.
+	Parts.make({
+		Name = "PlotPath", Parent = m, Color = Color3.fromRGB(196, 186, 168),
+		Size = Vector3.new(14, 0.3, 36),
+		CFrame = CFrame.new(0, W.GroundY + 0.05, -36),
+	})
+
+	-- One Neon maker and one Mega maker for the whole server.
+	local Shared = require(script.Parent.Parent.SharedMachines)
+	Shared.set("Neon", Machine.build("Neon", 0, CFrame.new(-22, W.GroundY, -70), m))
+	Shared.set("Mega", Machine.build("Mega", 0, CFrame.new(22, W.GroundY, -70), m))
+	for _, machine in Shared.all() do
+		machine:SetAttribute("Shared", true)
 	end
 
-	-- Deterministic decoration ring between the fountain and the gates.
 	local rng = Random.new(7)
 	local leafColors = {
 		Color3.fromRGB(46, 170, 70), Color3.fromRGB(80, 200, 90), Color3.fromRGB(30, 140, 80),
 	}
-	for i = 1, 18 do
-		local a = (i / 18) * math.pi * 2 + rng:NextNumber(-0.08, 0.08)
-		local r = rng:NextNumber(55, W.HubRadius - 12)
-		local cf = CFrame.new(math.cos(a) * r, W.GroundY + 0.2, math.sin(a) * r)
-			* CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+	for i = 1, 10 do
+		local a = (i / 10) * math.pi * 2
+		local r = rng:NextNumber(18, 34)
+		local cf = CFrame.new(math.cos(a) * r, W.GroundY + 0.2, -70 + math.sin(a) * r)
 		if i % 3 == 0 then
-			Parts.rock(cf, rng:NextNumber(0.8, 1.4), m)
+			Parts.rock(cf, rng:NextNumber(0.8, 1.2), m)
 		else
-			Parts.tree(cf, rng:NextNumber(0.9, 1.3), leafColors[rng:NextInteger(1, #leafColors)], m)
+			Parts.tree(cf, rng:NextNumber(0.8, 1.1), leafColors[(i % #leafColors) + 1], m)
 		end
 	end
 

@@ -25,13 +25,12 @@ end
 
 function Fusion.refresh(player: Player)
 	local session = Data.get(player)
-	local idx = Plots.plotOf(player)
-	local refs = idx and Plots.refs(idx)
-	if not session or not refs then
+	if not session or not Plots.plotOf(player) then
 		return
 	end
 	local slots = session.data.fusion :: any
-	for id, m in refs.machines do
+	local Shared = require(script.Parent.World.SharedMachines)
+	for id, m in Shared.all() do
 		Machine.apply(m, slots[id])
 	end
 end
@@ -118,14 +117,6 @@ end
 function Fusion.start()
 	Plots.onAssigned(function(player)
 		Fusion.refresh(player)
-	end)
-	Plots.onReleased(function(_player, idx)
-		local refs = Plots.refs(idx)
-		if refs then
-			for _, m in refs.machines do
-				Machine.apply(m, nil)
-			end
-		end
 	end)
 	Net.on("FusionUnlock", { "string" }, unlock)
 	Net.on("FusionStart", { "string", "string", "string" }, start)

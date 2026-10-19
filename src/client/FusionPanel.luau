@@ -227,6 +227,9 @@ local function ownPlotOf(inst: Instance): boolean
 	local node: Instance? = inst
 	while node do
 		local idx = node:GetAttribute("PlotIndex")
+		if node:GetAttribute("Shared") == true then
+			return true
+		end
 		if idx ~= nil then
 			return snap ~= nil and idx == snap.plotIndex
 		end
@@ -238,14 +241,24 @@ end
 -- Billboard text on every machine in the world, from the attributes the server sets.
 local function updateBillboards()
 	local world = workspace:FindFirstChild("World")
-	local plots = world and world:FindFirstChild("Plots")
-	if not plots then
+	local hub = world and world:FindFirstChild("Hub")
+	if not hub then
 		return
 	end
 	local now = State.now()
-	for _, plot in plots:GetChildren() do
-		for _, m in FusionData.Order do
-			local model = plot:FindFirstChild(m.Pad)
+	local snap = State.snapshot
+	for _, m in FusionData.Order do
+		local model = hub:FindFirstChild(m.Pad, true)
+		if model and snap then
+			local slot = snap.fusion[m.Id]
+			if slot then
+				model:SetAttribute("Unlocked", slot.unlocked)
+				model:SetAttribute("State", slot.state)
+				model:SetAttribute("EndsAt", slot.endsAt)
+			end
+		end
+		for _, _once in { model } do
+			local model = _once
 			local core = model and model:FindFirstChild("Core")
 			local bb = core and core:FindFirstChild("Status")
 			local label = bb and bb:FindFirstChild("Label") :: TextLabel?

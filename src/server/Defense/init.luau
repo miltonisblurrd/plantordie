@@ -24,6 +24,7 @@ local DropTables = require(ReplicatedStorage.Shared.DropTables)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local Plants = require(ReplicatedStorage.Shared.Plants)
+local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Zombies = require(ReplicatedStorage.Shared.Zombies)
 local Core = require(script.Core)
 local Biomes = require(script.Parent.Biomes)
@@ -123,10 +124,6 @@ local function syncPlant(player: Player, key: string)
 		return
 	end
 	local stats = Combat.plantStats(rec.species, rec.size, rec.variant)
-	if stats and not Garden.isGrown(player, key) then
-		stats = table.clone(stats)
-		stats.rate = 0 -- seedlings can be chewed but don't fight yet
-	end
 	local lane, x = laneAndX(key)
 	local old = st.field.plants[key]
 	Core.setPlant(st.field, key, lane, x, stats)
@@ -165,9 +162,6 @@ local function repairCost(player: Player): (number, number, number)
 	local cost = 0
 	if missing > 0 then
 		cost += math.ceil(incomeSeconds(player, D.RepairIncomeSeconds, D.RepairMin) * missing / maxHp)
-	end
-	if wilted > 0 then
-		cost += wilted * incomeSeconds(player, D.RepairPlantIncomeSeconds, math.ceil(D.RepairMin / 5))
 	end
 	return cost, missing, wilted
 end
@@ -216,7 +210,12 @@ local function spawnOne(st: PlotState, kind: string, t: number)
 	local lane = rng:NextInteger(1, math.clamp(session.data.lanesUnlocked, 1, P.Lanes))
 	local x = P.ZombieSpawnX + rng:NextNumber() * D.LaneSpawnJitter
 	nextId += 1
-	local z = Core.addZombie(st.field, nextId, kind, lane, x, Zombies.stats(kind, w.biome, w.night), t)
+	local stats = Zombies.stats(kind, w.biome, w.night)
+	local strength = Upgrades.portalOf(session.data.portalTier).Strength
+	stats.hp = math.floor(stats.hp * strength)
+	stats.armor = math.floor(stats.armor * strength)
+	stats.damage *= strength
+	local z = Core.addZombie(st.field, nextId, kind, lane, x, stats, t)
 	local m = ZombieModel.build(Zombies.ById[kind], worldCFrame(st, lane, x), st.folder)
 	m:SetAttribute("ZombieId", z.id)
 	m:SetAttribute("Kind", kind)
@@ -301,7 +300,7 @@ local function applyEvents(st: PlotState, events: { Core.Event }, fx: { Fx })
 			table.insert(fx, { k = "ring", a = worldCFrame(st, e.lane, e.x, 0.3).Position, r = e.amount,
 				c = Color3.fromRGB(150, 230, 255) })
 		elseif e.kind == "wilt" and p then
-			Garden.setWilted(st.player, p.key, true)
+			Garden.stun(st.player, p.key)
 			st.dirty = true
 		elseif e.kind == "kill" and z then
 			kills += 1
@@ -331,7 +330,8 @@ local function render(st: PlotState)
 	for id, z in st.field.zombies do
 		local m = st.models[id]
 		if m and not z.dead then
-			m:PivotTo(worldCFrame(st, z.lane, z.x))
+			local lean = if z.attacking then 0 else math.sin(os.clock() * 7 + z.id) * 0.18
+			m:PivotTo(worldCFrame(st, z.lane, z.x) * CFrame.Angles(lean, 0, lean * 0.4))
 			local hp = math.ceil(z.hp + z.armor)
 			if st.shown[id] ~= hp then
 				st.shown[id] = hp
@@ -402,7 +402,7 @@ local function startWave(player: Player, night: number)
 	}
 	Net.notify(
 		player,
-		`Night {night}: {#queue} zombies are coming for your garden!{if boss then " A ROT KING leads them!" else ""}`,
+		`Night {night}: your portal is opening. {#queue} monsters are walking out!{if boss then " A ROT KING leads them!" else ""}`,
 		"warn"
 	)
 	st.dirty = true
@@ -419,9 +419,6 @@ local function endWave(player: Player)
 	clearZombies(st, "dawn")
 	local events: { Core.Event } = {}
 	Core.dawn(st.field, events)
-	for _, key in Garden.wiltedKeys(player) do
-		Garden.setWilted(player, key, false)
-	end
 	Sync.resetHouseHp(player)
 	local session = Data.get(player)
 	if not w or not session then
@@ -525,15 +522,7 @@ local function repair(player: Player)
 		p.money -= cost
 	end)
 	Sync.resetHouseHp(player)
-	for _, key in Garden.wiltedKeys(player) do
-		Garden.setWilted(player, key, false)
-		local p = st.field.plants[key]
-		if p then
-			p.wilted = false
-			p.hp = p.maxHp
-		end
-	end
-	Net.notify(player, `Repaired for {Format.money(cost)}.`)
+	Net.notify(player, `House repaired for {Format.money(cost)}. Stunned plants wake up on their own, or for 11 Robux.`)
 	st.dirty = true
 end
 

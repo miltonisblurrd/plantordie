@@ -51,6 +51,13 @@ local NEON = Enum.Material.Neon
 local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinders point along X; this stands them up
 
 function Kit.at(ctx: Ctx, x: number, z: number, yaw: number?): CFrame
+	local limit = ctx.size / 2 - 4
+	local ax, az = math.abs(x), math.abs(z)
+	if ax > limit or az > limit then
+		local s = limit / math.max(ax, az, 1)
+		x *= s
+		z *= s
+	end
 	return ctx.cf * CFrame.new(x, 0, z) * CFrame.Angles(0, yaw or 0, 0)
 end
 
@@ -73,7 +80,7 @@ function Kit.isClear(ctx: Ctx, x: number, z: number, margin: number): boolean
 	if (Vector2.new(x, z) - Vector2.new(0, safeZ)).Magnitude < B.SafeRadius + 10 then
 		return false
 	end
-	return not (math.abs(x) < 10 and z < -ctx.size / 2 + 70)
+	return not (math.abs(x) < 8 and z < -ctx.size / 2 + 14)
 end
 
 function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)

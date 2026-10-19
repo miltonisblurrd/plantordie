@@ -334,10 +334,6 @@ function Core.dawn(f: Field, out: { Event })
 		end
 	end
 	f.traps = {}
-	for _, p in f.plants do
-		p.wilted = false
-		p.hp = p.maxHp
-	end
 end
 
 return Core

@@ -24,6 +24,7 @@ local Core = require(script.Core)
 local Data = require(script.Parent.Data)
 local Event = require(script.Parent.Event)
 local Fusion = require(script.Parent.Fusion)
+local Garden = require(script.Parent.Garden)
 local Net = require(script.Parent.Net)
 
 local Purchases = {}
@@ -67,6 +68,14 @@ end
 
 -- The grant the receipt path runs after its ledger write is saved.
 local function grant(player: Player, key: string, arg: string?)
+	if key == "Unstun" then
+		if arg and Garden.clearStun(player, arg) then
+			Net.notify(player, "That plant is awake again.")
+		else
+			Net.notify(player, "That plant wasn't stunned.", "warn")
+		end
+		return
+	end
 	local msg: string? = nil
 	Data.update(player, function(p)
 		msg = apply(p, key, arg, true)
@@ -154,7 +163,14 @@ function Purchases.start()
 	-- InstantGrow: `arg` is the tile key of one of the player's growing plants; its uid is saved
 	-- on the profile. Anything else clears the intent, so a stale target is never reused.
 	Net.on("PurchaseIntent", { "string", "string?" }, function(player, key: string, arg: string?)
-		if key ~= "InstantGrow" then
+		if key ~= "InstantGrow" and key ~= "Unstun" then
+			return
+		end
+		if key == "Unstun" then
+			Data.update(player, function(p)
+				local rec = arg and p.planted[arg]
+				p.purchaseIntent.Unstun = if rec then arg else nil
+			end)
 			return
 		end
 		Data.update(player, function(p)
@@ -175,6 +191,11 @@ function Purchases.start()
 		end
 	end)
 	if RunService:IsStudio() then
+		Net.on("DebugUnstun", { "string" }, function(player, key: string)
+			if Garden.clearStun(player, key) then
+				Net.notify(player, "That plant is awake again.")
+			end
+		end)
 		local bf = Instance.new("BindableFunction")
 		bf.Name = "DebugGrant"
 		bf.OnInvoke = function(player: Player, key: string, purchaseId: string?)

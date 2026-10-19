@@ -14,8 +14,10 @@ local Placement = require(script.Parent.Placement)
 
 local Inventory = {}
 
-local panel: Frame? = nil
-local list: ScrollingFrame? = nil
+local seedPanel: Frame? = nil
+local plantPanel: Frame? = nil
+local seedList: ScrollingFrame? = nil
+local plantList: ScrollingFrame? = nil
 
 local function entry(parent: Instance, order: number, title: string, sub: string, color: Color3, onPick: () -> ())
 	local b = Ui.button("Entry", "", parent)
@@ -38,82 +40,85 @@ local function entry(parent: Instance, order: number, title: string, sub: string
 	b.Activated:Connect(onPick)
 end
 
-local function rebuild()
-	local l = list
-	local snap = State.snapshot
-	if not l or not snap then
-		return
-	end
+local function clearList(l: ScrollingFrame)
 	for _, c in l:GetChildren() do
 		if c:IsA("GuiButton") or c:IsA("TextLabel") then
 			c:Destroy()
 		end
 	end
-	local order = 0
-	local any = false
-	for _, def in Plants.List do
-		local n = snap.seeds[def.Id] or 0
-		if n > 0 then
-			any = true
-			order += 1
-			local rarity = Rarities.ById[def.Rarity]
-			local rec = { species = def.Id, rarity = def.Rarity, size = "Small", variant = "Normal" }
-			entry(
-				l, order, `{def.Name} seed  x{n}`,
-				`{def.Rarity} · from {Format.money(Economy.incomeOf(rec))}/s · {Format.clock(def.GrowSeconds)}`,
-				rarity and rarity.Color or Ui.Text,
-				function()
-					Placement.select({ kind = "seed", id = def.Id })
-					if panel then
-						panel.Visible = false
+end
+
+local function rebuild()
+	local snap = State.snapshot
+	if not snap then
+		return
+	end
+	if seedList then
+		clearList(seedList)
+		local order = 0
+		local any = false
+		for _, def in Plants.List do
+			local n = snap.seeds[def.Id] or 0
+			if n > 0 then
+				any = true
+				order += 1
+				local rarity = Rarities.ById[def.Rarity]
+				local rec = { species = def.Id, rarity = def.Rarity, size = "Small", variant = "Normal" }
+				entry(
+					seedList, order, `{def.Name} seed  x{n}`,
+					`{def.Rarity} · {Format.money(Economy.incomeOf(rec))}/s · {Format.clock(def.GrowSeconds)}`,
+					rarity and rarity.Color or Ui.Text,
+					function()
+						Placement.select({ kind = "seed", id = def.Id })
+						if seedPanel then
+							seedPanel.Visible = false
+						end
 					end
-				end
-			)
+				)
+			end
+		end
+		if not any then
+			local empty = Ui.label("Empty", "No seeds yet. Dig in biomes to find more!", false, seedList)
+			empty.Size = UDim2.new(1, -8, 0, 40)
 		end
 	end
-	for id, item in snap.plants do
-		local def = Plants.ById[item.species]
-		if def then
-			any = true
-			order += 1
-			local rarity = Rarities.ById[item.rarity]
-			local prefix = if item.variant ~= "Normal" then item.variant .. " " else ""
-			entry(
-				l, 1000 + order, `{prefix}{def.Name} ({item.size})`,
-				`Grown plant · {Format.money(Economy.incomeOf(item))}/s · tap to place`,
-				rarity and rarity.Color or Ui.Text,
-				function()
-					Placement.select({ kind = "plant", id = id })
-					if panel then
-						panel.Visible = false
+	if plantList then
+		clearList(plantList)
+		local order = 0
+		local any = false
+		for id, item in snap.plants do
+			local def = Plants.ById[item.species]
+			if def then
+				any = true
+				order += 1
+				local rarity = Rarities.ById[item.rarity]
+				local prefix = if item.variant ~= "Normal" then item.variant .. " " else ""
+				entry(
+					plantList, order, `{prefix}{def.Name} ({item.size})`,
+					`Grown plant · {Format.money(Economy.incomeOf(item))}/s · tap to place`,
+					rarity and rarity.Color or Ui.Text,
+					function()
+						Placement.select({ kind = "plant", id = id })
+						if plantPanel then
+							plantPanel.Visible = false
+						end
 					end
-				end
-			)
+				)
+			end
 		end
-	end
-	if not any then
-		local empty = Ui.label("Empty", "No seeds yet. Dig in biomes to find more!", false, l)
-		empty.Size = UDim2.new(1, -8, 0, 40)
+		if not any then
+			local empty = Ui.label("Empty", "No grown plants stored. Dig one up after it grows.", false, plantList)
+			empty.Size = UDim2.new(1, -8, 0, 48)
+		end
 	end
 end
 
-function Inventory.toggle()
-	if panel then
-		panel.Visible = not panel.Visible
-		if panel.Visible then
-			rebuild()
-		end
-	end
-end
-
-function Inventory.start(bar: GuiObject)
-	local gui = Ui.screen("Inventory", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
-	local p = Ui.panel("Panel", UDim2.fromOffset(340, 360), gui)
-	p.AnchorPoint = Vector2.new(0.5, 1)
-	p.Position = UDim2.new(0.5, 0, 1, -76)
+local function makePanel(gui: Instance, name: string, titleText: string, anchorX: number, posX: number): (Frame, ScrollingFrame)
+	local p = Ui.panel(name, UDim2.fromOffset(280, 380), gui)
+	p.AnchorPoint = Vector2.new(anchorX, 0.5)
+	p.Position = UDim2.new(posX, if anchorX == 0 then 156 else -156, 0.5, 0)
 	p.Visible = false
-	panel = p
-	local title = Ui.label("Title", "Seeds & Plants", true, p)
+	local title = Ui.label("Title", titleText, true, p)
 	title.Size = UDim2.new(1, -24, 0, 34)
 	title.Position = UDim2.fromOffset(12, 8)
 	local sf = Instance.new("ScrollingFrame")
@@ -127,15 +132,37 @@ function Inventory.start(bar: GuiObject)
 	sf.ScrollBarThickness = 6
 	sf.Parent = p
 	Ui.list(sf, Enum.FillDirection.Vertical, 6)
-	list = sf
+	return p, sf
+end
 
-	local open = Ui.button("Seeds", "Seeds", bar)
-	open.LayoutOrder = 1
-	open.Size = UDim2.fromOffset(110, Ui.MinTouch + 4)
-	open.Activated:Connect(Inventory.toggle)
+function Inventory.start(left: GuiObject, right: GuiObject)
+	local gui = Ui.screen("Inventory", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
+	local seeds, seedScroll = makePanel(gui, "Seeds", "Seeds", 0, 0)
+	local plants, plantScroll = makePanel(gui, "Plants", "Plants", 1, 1)
+	seedPanel, plantPanel = seeds, plants
+	seedList, plantList = seedScroll, plantScroll
+
+	local openSeeds = Ui.button("Seeds", "Seeds", left)
+	openSeeds.LayoutOrder = 1
+	openSeeds.Size = UDim2.fromOffset(120, Ui.MinTouch + 8)
+	openSeeds.Activated:Connect(function()
+		seeds.Visible = not seeds.Visible
+		if seeds.Visible then
+			rebuild()
+		end
+	end)
+	local openPlants = Ui.button("Plants", "Plants", right)
+	openPlants.LayoutOrder = 1
+	openPlants.Size = UDim2.fromOffset(120, Ui.MinTouch + 8)
+	openPlants.Activated:Connect(function()
+		plants.Visible = not plants.Visible
+		if plants.Visible then
+			rebuild()
+		end
+	end)
 
 	State.onSnapshot(function()
-		if p.Visible then
+		if seeds.Visible or plants.Visible then
 			rebuild()
 		end
 	end)

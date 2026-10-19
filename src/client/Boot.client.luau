@@ -28,28 +28,22 @@ local Feedback = require(script.Parent.Feedback)
 local SettingsPanel = require(script.Parent.SettingsPanel)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
--- Scrolls sideways when the buttons are wider than the screen; centred when they fit. The
--- right gap keeps clear of the Lane View button.
-local bar = Instance.new("ScrollingFrame")
-bar.Name = "Bar"
-bar.BackgroundTransparency = 1
-bar.BorderSizePixel = 0
-bar.AnchorPoint = Vector2.new(0.5, 1)
-bar.Position = UDim2.new(0.5, -60, 1, -8)
-bar.Size = UDim2.new(1, -220, 0, 80)
-bar.ScrollingDirection = Enum.ScrollingDirection.X
-bar.AutomaticCanvasSize = Enum.AutomaticSize.X
-bar.CanvasSize = UDim2.new()
-bar.ScrollBarThickness = 4
-bar.VerticalScrollBarInset = Enum.ScrollBarInset.None
-bar.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
-bar.Parent = barGui
-local barLimit = Instance.new("UISizeConstraint")
-barLimit.MaxSize = Vector2.new(820, 80)
-barLimit.Parent = bar
-local barList = Ui.list(bar, Enum.FillDirection.Horizontal, 10)
-barList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-barList.VerticalAlignment = Enum.VerticalAlignment.Center
+
+local function side(name: string, anchorX: number, posX: number): Frame
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.BackgroundTransparency = 1
+	f.AnchorPoint = Vector2.new(anchorX, 0.5)
+	f.Position = UDim2.new(posX, if anchorX == 0 then 8 else -8, 0.5, 0)
+	f.Size = UDim2.fromOffset(140, 460)
+	f.Parent = barGui
+	local list = Ui.list(f, Enum.FillDirection.Vertical, 8)
+	list.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	return f
+end
+
+local left = side("Left", 0, 0)
+local right = side("Right", 1, 1)
 
 Sfx.start()
 Effects.start()
@@ -60,17 +54,17 @@ Gates.start()
 Placement.start()
 Inspect.start()
 Placement.setInspectHandler(Inspect.open)
-Inventory.start(bar)
-Shops.start(bar)
+Inventory.start(left, right)
+Shops.start(left)
 GardenView.start()
 Danger.start()
-Shovel.start(bar)
+Shovel.start(left)
 Atmosphere.start()
 Defense.start()
 Purchases.start()
 FusionPanel.start()
-Collection.start(bar)
-EventShop.start(bar)
-SettingsPanel.start(bar)
+Collection.start(right)
+EventShop.start(right)
+SettingsPanel.start(right)
 Feedback.start()
 State.start()

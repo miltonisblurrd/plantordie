@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
+local Rarities = require(ReplicatedStorage.Shared.Rarities)
+local Sizes = require(ReplicatedStorage.Shared.Sizes)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local Plants = require(ReplicatedStorage.Shared.Plants)
@@ -24,7 +26,13 @@ local Garden = {}
 
 -- `wilted` is night-only state from Defense: a wilted plant keeps its record but earns nothing
 -- until dawn or a repair. It is not saved, so a rejoin also recovers it.
-type View = { models: { [string]: Model }, stages: { [string]: number }, wilted: { [string]: boolean? }, income: number }
+type View = {
+	models: { [string]: Model },
+	stages: { [string]: number },
+	wilted: { [string]: boolean? },
+	stunUntil: { [string]: number },
+	income: number,
+}
 local views: { [Player]: View } = {}
 local rng = Random.new()
 local changedCallbacks: { (Player, string) -> () } = {}
@@ -126,6 +134,39 @@ local function render(player: Player, key: string)
 	end
 end
 
+function Garden.stunSeconds(rec: { rarity: string, size: string }): number
+	local rarity = Rarities.ById[rec.rarity]
+	local size = Sizes.ById[rec.size]
+	return 6 + (rarity and rarity.Order or 1) * 3 + (size and size.Order or 1) * 2
+end
+
+function Garden.stun(player: Player, key: string)
+	local v = views[player]
+	local session = Data.get(player)
+	local rec = session and session.data.planted[key]
+	if not v or not rec then
+		return
+	end
+	local untilAt = os.time() + Garden.stunSeconds(rec)
+	v.stunUntil[key] = untilAt
+	Garden.setWilted(player, key, true)
+	local m = v.models[key]
+	if m then
+		m:SetAttribute("StunUntil", untilAt)
+	end
+end
+
+function Garden.clearStun(player: Player, key: string): boolean
+	local v = views[player]
+	local session = Data.get(player)
+	if not v or not session or not session.data.planted[key] or not v.wilted[key] then
+		return false
+	end
+	v.stunUntil[key] = nil
+	Garden.setWilted(player, key, false)
+	return true
+end
+
 function Garden.setWilted(player: Player, key: string, on: boolean)
 	local v = views[player]
 	if not v or (v.wilted[key] == true) == on then
@@ -176,7 +217,7 @@ local function restore(player: Player)
 	if not session then
 		return
 	end
-	views[player] = { models = {}, stages = {}, wilted = {}, income = 0 }
+	views[player] = { models = {}, stages = {}, wilted = {}, stunUntil = {}, income = 0 }
 	for key in session.data.planted do
 		render(player, key)
 	end
@@ -396,7 +437,13 @@ local function tick()
 			local d = session.data
 			local mult = growthMult(d)
 			local total = 0
+			local portal = Upgrades.portalOf(d.portalTier)
+			local stagePay = { 0.25, 0.5, 0.75, 1 }
 			for key, rec in d.planted do
+				local untilAt = v.stunUntil[key]
+				if untilAt and now >= untilAt then
+					Garden.clearStun(player, key)
+				end
 				local _, stage = Economy.growth(rec, now, mult)
 				if stage ~= v.stages[key] then
 					render(player, key)
@@ -407,8 +454,8 @@ local function tick()
 						m:SetAttribute("GrowSeconds", secs)
 					end
 				end
-				if stage == 4 and not v.wilted[key] then
-					total += Economy.incomeOf(rec)
+				if not v.wilted[key] then
+					total += Economy.incomeOf(rec, { incomeMultiplier = portal.IncomeMultiplier }) * (stagePay[stage] or 0)
 				end
 			end
 			v.income = total

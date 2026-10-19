@@ -80,7 +80,7 @@ local Zombies = {
 function Zombies.available(night: number, biomeIndex: number): { Zombie }
 	local out = {}
 	for _, z in list do
-		if biomeIndex >= z.MinBiome or night >= z.MinNight then
+		if biomeIndex >= z.MinBiome then
 			table.insert(out, z)
 		end
 	end

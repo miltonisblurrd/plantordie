@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 5,
+		SchemaVersion = 6,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -37,23 +37,28 @@ local Config = {
 	},
 
 	World = {
-		HubRadius = 95,
-		GateRingRadius = 118,
-		PlotRingRadius = 300,
+		HubRadius = 42,
+		GateRingRadius = 0, -- unused; biomes are a line in front of the plots
+		PlotRingRadius = 0,
 		PlotCount = 8,
+		PlotGap = 10,
 		GroundY = 0,
 	},
 
-	-- Biome areas sit on an outer ring, two per gap between plots, each a square region whose
-	-- -Z side (the entrance) faces the hub. Baseplate covers out to BiomeRingRadius + Size/2.
+	-- Biomes sit in one line in front of the plot row. Walk +Z to the next one.
 	Biome = {
-		RingRadius = 760,
-		Size = 240,
-		SafeRadius = 18, -- safe zone circle just inside the entrance
-		DigSpots = 10,
+		RingRadius = 0,
+		Size = 56,
+		Gap = 12,
+		FrontGap = 28, -- studs from the plot row's front edge to biome 1
+		SafeRadius = 10,
+		DigSpots = 8,
 		ToughSpots = 3,
-		EnforceSeconds = 0.5, -- locked-region check interval
-		PathWidth = 10,
+		EnforceSeconds = 0.5,
+		PathWidth = 8,
+		-- Dirt HP = Index * this. Tough mounds use the tough multiplier.
+		DirtHpPerIndex = 4,
+		ToughHpMultiplier = 2.5,
 	},
 
 	Dig = {
@@ -78,14 +83,14 @@ local Config = {
 	},
 
 	Plot = {
-		Width = 170, -- along lanes (local X)
-		Depth = 110, -- across lanes (local Z)
-		TileSize = 8,
+		Width = 78,
+		Depth = 64,
+		TileSize = 6,
 		Lanes = 7,
 		Columns = 9,
-		GardenOriginX = -42, -- local X of column 1's left edge
-		HouseX = -66, -- local X of house centre
-		ZombieSpawnX = 70,
+		GardenOriginX = -24,
+		HouseX = -32,
+		ZombieSpawnX = 34,
 	},
 
 	Garden = {
@@ -101,8 +106,8 @@ local Config = {
 	},
 
 	DayNight = {
-		DaySeconds = 240,
-		NightSeconds = 120,
+		DaySeconds = 300, -- 5 minutes between nights
+		NightSeconds = 150, -- 2:30 of night; portals only spawn then
 		DayClockStart = 6.5,
 		DayClockEnd = 18.5,
 		NightClockEnd = 30.5, -- wraps past midnight to 06:30

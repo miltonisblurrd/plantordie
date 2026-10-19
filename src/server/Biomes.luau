@@ -26,7 +26,7 @@ export type BiomeInfo = {
 }
 
 local Biomes = {}
-Biomes.HubSpawn = CFrame.new(0, Config.World.GroundY + 4, 28)
+Biomes.HubSpawn = CFrame.new(0, Config.World.GroundY + 4, -70)
 
 local gates: { [string]: Model } = {}
 local infos: { [string]: BiomeInfo } = {}
@@ -68,10 +68,6 @@ local function inside(info: BiomeInfo, pos: Vector3): boolean
 end
 
 function Biomes.regionOf(pos: Vector3): string?
-	local flat = Vector3.new(pos.X, 0, pos.Z).Magnitude
-	if math.abs(flat - B.RingRadius) > B.Size * 0.75 then
-		return nil
-	end
 	for id, info in infos do
 		if inside(info, pos) then
 			return id

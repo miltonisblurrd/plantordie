@@ -5,6 +5,7 @@
 -- ProcessReceipt, so a cancelled or failed prompt grants nothing.
 
 local MarketplaceService = game:GetService("MarketplaceService")
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -21,6 +22,7 @@ local TITLES: { [string]: string } = {
 	MegaSkip = "Skip Mega Fusion",
 	GrowthBoost = "2x Growth Boost",
 	HalloweenPack = "Halloween Seed Pack",
+	Unstun = "Wake Plant",
 }
 
 function Purchases.title(key: string): string
@@ -38,7 +40,13 @@ function Purchases.offer(key: string, arg: string?)
 		return
 	end
 	if prod.Id == 0 then
-		Notifications.show("Robux purchases aren't set up in this build yet.", "warn")
+		if key == "Unstun" and arg and RunService:IsStudio() then
+			State.remote("PurchaseIntent"):FireServer(key, arg)
+			State.remote("DebugUnstun"):FireServer(arg)
+			Notifications.show("Studio test: plant woken. Live servers need the 11 Robux product id.", "info")
+		else
+			Notifications.show("Robux purchases aren't set up in this build yet.", "warn")
+		end
 		return
 	end
 	Ui.confirm(

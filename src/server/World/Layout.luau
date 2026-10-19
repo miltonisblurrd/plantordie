@@ -1,8 +1,7 @@
 --!strict
--- World placement maths shared by builders and services (server only).
--- Plots sit on a ring at 45-degree steps; biome gates sit two per sector between plot paths
--- (16 slots, 15 used) so no gate ever blocks a plot path. Biome areas sit on an outer ring,
--- reached by paths that pass through the gaps between plots.
+-- Plots sit in one tight row. Biomes sit in a line in front of that row (+Z).
+-- Walk forward from the plots to biome 1, then the next, and so on.
+-- Plot local frame is unchanged: -Z faces the hub (behind the row), zombies enter from +X.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,71 +9,74 @@ local Config = require(ReplicatedStorage.Shared.Config)
 
 local W = Config.World
 local B = Config.Biome
+local P = Config.Plot
 
 local Layout = {}
 
-local function ringPoint(angleDeg: number, radius: number): Vector3
-	local a = math.rad(angleDeg)
-	return Vector3.new(math.cos(a) * radius, W.GroundY, math.sin(a) * radius)
+function Layout.plotSpan(): number
+	return P.Width + W.PlotGap
 end
 
-function Layout.plotAngle(index: number): number
-	return (index - 1) * (360 / W.PlotCount)
-end
-
--- Plot CFrame: -Z faces the hub.
 function Layout.plotCFrame(index: number): CFrame
-	local pos = ringPoint(Layout.plotAngle(index), W.PlotRingRadius)
-	return CFrame.lookAt(pos, Vector3.new(0, W.GroundY, 0))
+	local x = (index - (W.PlotCount + 1) / 2) * Layout.plotSpan()
+	local pos = Vector3.new(x, W.GroundY, 0)
+	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1))
+end
+
+function Layout.plotAngle(_index: number): number
+	return 0
+end
+
+-- Front edge of the plot row (world +Z).
+function Layout.plotFrontZ(): number
+	return P.Depth / 2
+end
+
+function Layout.biomeCenterZ(biomeIndex: number): number
+	local step = B.Size + B.Gap
+	return Layout.plotFrontZ() + B.FrontGap + B.Size / 2 + (biomeIndex - 1) * step
+end
+
+-- Biome centre. -Z faces the plots.
+function Layout.biomeCFrame(biomeIndex: number): CFrame
+	local pos = Vector3.new(0, W.GroundY, Layout.biomeCenterZ(biomeIndex))
+	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1))
+end
+
+function Layout.biomeAngle(_biomeIndex: number): number
+	return 90
 end
 
 function Layout.gateAngle(biomeIndex: number): number
-	local sector = (biomeIndex - 1) // 2
-	local slot = (biomeIndex - 1) % 2
-	local step = 360 / W.PlotCount
-	return sector * step + step * (slot + 1) / 3
+	return biomeIndex
 end
 
--- Gate CFrame: -Z faces outward, away from the hub.
-function Layout.gateCFrame(biomeIndex: number): CFrame
-	local angle = Layout.gateAngle(biomeIndex)
-	local pos = ringPoint(angle, W.GateRingRadius)
-	return CFrame.lookAt(pos, pos + ringPoint(angle, 1))
-end
-
--- The gap between plot s and plot s+1 that both of a sector's gates route through.
 function Layout.gapAngle(biomeIndex: number): number
-	local step = 360 / W.PlotCount
-	return ((biomeIndex - 1) // 2) * step + step / 2
+	return biomeIndex
 end
 
-function Layout.biomeAngle(biomeIndex: number): number
-	local slot = (biomeIndex - 1) % 2
-	local step = 360 / W.PlotCount
-	return Layout.gapAngle(biomeIndex) + (if slot == 0 then -step / 4 else step / 4)
+-- Gate sits just in front of the biome entrance, facing further into the line.
+function Layout.gateCFrame(biomeIndex: number): CFrame
+	local entranceZ = Layout.biomeCenterZ(biomeIndex) - B.Size / 2 - 6
+	local pos = Vector3.new(0, W.GroundY, entranceZ)
+	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, 1))
 end
 
--- Biome centre. -Z faces the hub, so the entrance edge is at local Z = -Size/2.
-function Layout.biomeCFrame(biomeIndex: number): CFrame
-	local pos = ringPoint(Layout.biomeAngle(biomeIndex), B.RingRadius)
-	return CFrame.lookAt(pos, Vector3.new(0, W.GroundY, 0))
-end
-
--- Path waypoints from just outside the gate to the biome entrance. The route turns into the
--- gap between plots inside the plot ring, so it never crosses a plot.
 function Layout.biomePath(biomeIndex: number): { Vector3 }
-	local gate = Layout.gateAngle(biomeIndex)
-	local gap = Layout.gapAngle(biomeIndex)
-	local inner = W.PlotRingRadius - Config.Plot.Depth / 2 - 55
-	local outer = W.PlotRingRadius + Config.Plot.Depth / 2 + 60
-	local entrance = (Layout.biomeCFrame(biomeIndex) * CFrame.new(0, 0, -B.Size / 2)).Position
+	local fromZ = if biomeIndex == 1
+		then Layout.plotFrontZ() + 6
+		else Layout.biomeCenterZ(biomeIndex - 1) + B.Size / 2
+	local toZ = Layout.biomeCenterZ(biomeIndex) - B.Size / 2
 	return {
-		ringPoint(gate, W.GateRingRadius + 6),
-		ringPoint(gate, inner),
-		ringPoint(gap, inner),
-		ringPoint(gap, outer),
-		entrance,
+		Vector3.new(0, W.GroundY, fromZ),
+		Vector3.new(0, W.GroundY, toZ),
 	}
+end
+
+function Layout.mapExtent(): Vector3
+	local width = Layout.plotSpan() * W.PlotCount + 80
+	local depth = Layout.biomeCenterZ(15) + B.Size
+	return Vector3.new(width, 0, depth)
 end
 
 return Layout

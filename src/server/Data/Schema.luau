@@ -55,6 +55,7 @@ export type Profile = {
 	nextItemId: number,
 	planted: { [string]: PlantedTile }, -- tile key "lane_col" -> plant
 	shovelTier: number,
+	portalTier: number,
 	-- Unbanked dig rewards (species -> count). Saved so a disconnect never wipes them; only a
 	-- guardian catch clears it. Banked into `seeds` at your plot or the hub fountain.
 	expedition: { [string]: number },
@@ -111,6 +112,7 @@ function Schema.default(): Profile
 		nextItemId = 1,
 		planted = {},
 		shovelTier = Config.Start.ShovelTier,
+		portalTier = 1,
 		expedition = {},
 		water = { channel = false, sprinkler = false, pond = false },
 		fusion = { Neon = idleSlot(), Mega = idleSlot() },
@@ -195,6 +197,11 @@ local migrations: { [number]: (any) -> any } = {
 			d.nextItemId = nextId
 		end
 		d.version = 5
+		return d
+	end,
+	[5] = function(d)
+		d.portalTier = 1
+		d.version = 6
 		return d
 	end,
 }

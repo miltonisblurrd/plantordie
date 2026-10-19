@@ -156,10 +156,33 @@ local function buyWater(player: Player, key: string)
 	Net.notify(player, `{nextDef.Name} built! Plants grow x{nextDef.GrowthMultiplier} faster.`)
 end
 
+function Shop.buyPortal(player: Player)
+	local session = Data.get(player)
+	if not session or not Plots.plotOf(player) then
+		return
+	end
+	local d = session.data
+	local nextDef = Upgrades.Portals[d.portalTier + 1]
+	if not nextDef then
+		Net.notify(player, "Your portal is already max tier.", "warn")
+		return
+	end
+	if d.money < nextDef.Cost then
+		Net.notify(player, `Not enough money. {nextDef.Name} costs {Format.money(nextDef.Cost)}.`, "error")
+		return
+	end
+	Data.update(player, function(p)
+		p.money -= nextDef.Cost
+		p.portalTier = nextDef.Tier
+	end)
+	Net.notify(player, `{nextDef.Name}! Income x{nextDef.IncomeMultiplier}, monsters come out stronger.`)
+end
+
 function Shop.start()
 	Net.on("BuyWater", { "string" }, buyWater)
 	Net.on("UnlockBiome", { "string" }, unlockBiome)
 	Net.on("BuyShovel", {}, buyShovel)
+	Net.on("BuyPortal", {}, Shop.buyPortal)
 	Net.on("BuyLane", {}, buyLane)
 	Net.on("BuyHouse", {}, buyHouse)
 end

@@ -130,6 +130,10 @@ local function assign(player: Player, session: Data.Session)
 	local refs = refsByIndex[free]
 	refs.model:SetAttribute("OwnerUserId", player.UserId)
 	refs.ownerLabel.Text = player.Name
+	local sign = refs.ownerLabel.Parent
+	if sign and sign:IsA("BillboardGui") then
+		sign.Enabled = true
+	end
 	Plots.refresh(player)
 
 	charConns[player] = player.CharacterAdded:Connect(function(character)
@@ -161,7 +165,11 @@ local function release(player: Player)
 	end
 	local refs = refsByIndex[idx]
 	refs.model:SetAttribute("OwnerUserId", nil)
-	refs.ownerLabel.Text = "Empty Plot"
+	refs.ownerLabel.Text = ""
+	local sign = refs.ownerLabel.Parent
+	if sign and sign:IsA("BillboardGui") then
+		sign.Enabled = false
+	end
 	PlotBuilder.setLanes(refs, Config.Start.LanesUnlocked)
 	PlotBuilder.setHouseTier(refs, 1)
 	PlotBuilder.setWater(refs, { channel = false, sprinkler = false, pond = false })
@@ -175,6 +183,18 @@ function Plots.start(worldFolder: Instance)
 		local refs = PlotBuilder.build(i, Layout.plotCFrame(i), folder)
 		PlotBuilder.setLanes(refs, Config.Start.LanesUnlocked)
 		refsByIndex[i] = refs
+		local portal = refs.model:FindFirstChild("Portal")
+		local ring = portal and portal:FindFirstChild("Ring")
+		local prompt = ring and ring:FindFirstChild("PortalPrompt")
+		if prompt and prompt:IsA("ProximityPrompt") then
+			prompt.Triggered:Connect(function(player)
+				if Plots.isOwner(player, refs.model) then
+					require(script.Parent.Shop).buyPortal(player)
+				else
+					Net.notify(player, "That portal belongs to another garden.", "warn")
+				end
+			end)
+		end
 	end
 
 	Data.onLoaded(assign)

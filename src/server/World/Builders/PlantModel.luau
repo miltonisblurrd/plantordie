@@ -157,24 +157,7 @@ function PlantModel.build(record: Record, stage: number, base: CFrame, parent: I
 			top += hs
 			if stage == 4 then
 				accent(m, recipe, headCf, base * CFrame.new(0, 0.5 + stemH * 0.4, 0), s)
-				if variant.Neon then
-					local light = Instance.new("PointLight")
-					light.Color = recipe.HeadColor
-					light.Range = 10
-					light.Brightness = 1.5
-					light.Parent = h
-					local particles = Instance.new("ParticleEmitter")
-					particles.Rate = 3
-					particles.Lifetime = NumberRange.new(1.5, 2.5)
-					particles.Speed = NumberRange.new(0.5, 1)
-					particles.Size = NumberSequence.new(0.25)
-					particles.LightEmission = 1
-					particles.Color = ColorSequence.new(recipe.HeadColor)
-					particles.Parent = h
-				end
 				if variant.Rainbow then
-					local sparkles = Instance.new("Sparkles")
-					sparkles.Parent = h
 					CollectionService:AddTag(m, "MegaPlant")
 				end
 			end

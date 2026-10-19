@@ -20,6 +20,7 @@ local panel: Frame? = nil
 local current: Model? = nil
 local fields: { [string]: TextLabel } = {}
 local growBtn: TextButton? = nil
+local unstunBtn: TextButton? = nil
 
 local function close()
 	current = nil
@@ -42,7 +43,11 @@ local function refresh()
 	fields.Rarity.TextColor3 = if rarity then rarity.Color else Ui.Text
 	local stage = m:GetAttribute("Stage") :: number
 	local income = (m:GetAttribute("Income") :: number?) or 0
-	if stage == 4 then
+	local stunned = m:GetAttribute("Wilted") == true
+	if stunned then
+		fields.Status.Text = "Stunned — not earning"
+		fields.Income.Text = "Wakes on a timer, or for 11 Robux"
+	elseif stage == 4 then
 		fields.Status.Text = "Fully grown"
 		fields.Income.Text = `Earning {Format.money(income)}/s`
 	else
@@ -53,8 +58,11 @@ local function refresh()
 	if growBtn then
 		local snap = State.snapshot
 		local credits = if snap then snap.credits.InstantGrow or 0 else 0
-		growBtn.Visible = stage ~= 4
+		growBtn.Visible = stage ~= 4 and not stunned
 		growBtn.Text = if credits > 0 then `Instant Grow (use x{credits})` else "Instant Grow (Robux)"
+	end
+	if unstunBtn then
+		unstunBtn.Visible = stunned
 	end
 	local combat = def and def.Combat
 	fields.Role.Text = if combat and combat.Role ~= "Income"
@@ -113,6 +121,20 @@ function Inspect.start()
 		else
 			Purchases.offer("InstantGrow", key)
 		end
+	end)
+
+	local wake = Ui.button("Unstun", "Wake now (11 Robux)", p)
+	wake.BackgroundColor3 = Ui.Warn
+	wake.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
+	wake.Position = UDim2.new(0, 12, 1, -(Ui.MinTouch * 3 + 28))
+	wake.Visible = false
+	unstunBtn = wake
+	wake.Activated:Connect(function()
+		local m = current
+		if not m then
+			return
+		end
+		Purchases.offer("Unstun", m:GetAttribute("TileKey") :: string)
 	end)
 
 	local remove = Ui.button("Remove", "Dig Up", p)

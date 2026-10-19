@@ -9,6 +9,7 @@ export type Shovel = {
 	DigSeconds: number,
 	LuckBonus: number,
 	ToughTier: number,
+	Damage: number, -- HP removed from a dirt mound per dig
 	Color: Color3,
 }
 
@@ -24,11 +25,21 @@ export type WaterTier = {
 }
 
 local shovels: { Shovel } = {
-	{ Tier = 1, Name = "Rusty Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Color = Color3.fromHex("#8B6B4A") },
-	{ Tier = 2, Name = "Iron Shovel", Cost = 10_000, DigSeconds = 2.2, LuckBonus = 0.05, ToughTier = 2, Color = Color3.fromHex("#B0B6BE") },
-	{ Tier = 3, Name = "Golden Shovel", Cost = 1_000_000, DigSeconds = 1.5, LuckBonus = 0.12, ToughTier = 3, Color = Color3.fromHex("#FFC83D") },
-	{ Tier = 4, Name = "Crystal Shovel", Cost = 30_000_000, DigSeconds = 1, LuckBonus = 0.25, ToughTier = 4, Color = Color3.fromHex("#5CE1E6") },
-	{ Tier = 5, Name = "Void Shovel", Cost = 150_000_000, DigSeconds = 0.7, LuckBonus = 0.4, ToughTier = 4, Color = Color3.fromHex("#C77DFF") },
+	{ Tier = 1, Name = "Rusty Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Damage = 2, Color = Color3.fromHex("#8B6B4A") },
+	{ Tier = 2, Name = "Iron Shovel", Cost = 10_000, DigSeconds = 2.2, LuckBonus = 0.05, ToughTier = 2, Damage = 5, Color = Color3.fromHex("#B0B6BE") },
+	{ Tier = 3, Name = "Golden Shovel", Cost = 1_000_000, DigSeconds = 1.5, LuckBonus = 0.12, ToughTier = 3, Damage = 10, Color = Color3.fromHex("#FFC83D") },
+	{ Tier = 4, Name = "Crystal Shovel", Cost = 30_000_000, DigSeconds = 1, LuckBonus = 0.25, ToughTier = 4, Damage = 18, Color = Color3.fromHex("#5CE1E6") },
+	{ Tier = 5, Name = "Void Shovel", Cost = 150_000_000, DigSeconds = 0.7, LuckBonus = 0.4, ToughTier = 5, Damage = 30, Color = Color3.fromHex("#C77DFF") },
+}
+
+-- Each plot's portal. Higher tiers raise garden income and the strength of monsters that walk out.
+export type PortalTier = { Tier: number, Name: string, Cost: number, IncomeMultiplier: number, Strength: number }
+local portals: { PortalTier } = {
+	{ Tier = 1, Name = "Spark Portal", Cost = 0, IncomeMultiplier = 1, Strength = 1 },
+	{ Tier = 2, Name = "Ember Portal", Cost = 5_000, IncomeMultiplier = 1.35, Strength = 1.25 },
+	{ Tier = 3, Name = "Storm Portal", Cost = 80_000, IncomeMultiplier = 1.8, Strength = 1.6 },
+	{ Tier = 4, Name = "Void Portal", Cost = 2_000_000, IncomeMultiplier = 2.5, Strength = 2.1 },
+	{ Tier = 5, Name = "Myth Portal", Cost = 40_000_000, IncomeMultiplier = 3.5, Strength = 2.8 },
 }
 
 local channel: WaterTier = {
@@ -49,9 +60,14 @@ type WaterState = { channel: boolean, sprinkler: boolean, pond: boolean }
 
 local Upgrades = {
 	Shovels = shovels,
+	Portals = portals,
 	Water = { Channel = channel, Sprinkler = sprinkler, Pond = pond },
 	WaterOrder = waterOrder,
 }
+
+function Upgrades.portalOf(tier: number): PortalTier
+	return portals[tier] or portals[1]
+end
 
 function Upgrades.nextWater(water: WaterState): WaterTier?
 	for _, t in waterOrder do
