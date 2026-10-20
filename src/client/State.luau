@@ -29,6 +29,9 @@ export type Snapshot = {
 	collection: { [string]: boolean }, -- "species|variant"
 	growthBoostEndsAt: number,
 	persistent: boolean,
+	speed: number,
+	treadmillLevel: number,
+	trails: { owned: { [string]: boolean }, equipped: string },
 }
 
 export type FusionSlot = {
@@ -82,9 +85,12 @@ function State.now(): number
 	return workspace:GetServerTimeNow()
 end
 State.dayNight = nil :: DayNightInfo?
+-- Latest speed total: from StateSync, and from SpeedGain between snapshots.
+State.speed = 0
 
 local snapshotListeners: { (Snapshot) -> () } = {}
 local dayNightListeners: { (DayNightInfo) -> () } = {}
+local speedListeners: { (number) -> () } = {}
 
 function State.onSnapshot(cb: (Snapshot) -> ())
 	table.insert(snapshotListeners, cb)
@@ -100,6 +106,21 @@ function State.onDayNight(cb: (DayNightInfo) -> ())
 	end
 end
 
+function State.onSpeed(cb: (number) -> ())
+	table.insert(speedListeners, cb)
+	task.spawn(cb, State.speed)
+end
+
+function State.setSpeed(total: number)
+	if total == State.speed then
+		return
+	end
+	State.speed = total
+	for _, cb in speedListeners do
+		task.spawn(cb, total)
+	end
+end
+
 function State.start()
 	local remotes = ReplicatedStorage:WaitForChild("Remotes")
 	local stateSync = remotes:WaitForChild("StateSync") :: RemoteEvent
@@ -111,6 +132,7 @@ function State.start()
 		for _, cb in snapshotListeners do
 			task.spawn(cb, snap)
 		end
+		State.setSpeed(snap.speed)
 	end)
 	local function setDayNight(phase: string, endsAt: number, duration: number, night: number)
 		local cur = State.dayNight

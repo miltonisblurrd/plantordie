@@ -23,6 +23,7 @@ local TITLES: { [string]: string } = {
 	GrowthBoost = "2x Growth Boost",
 	HalloweenPack = "Halloween Seed Pack",
 	Unstun = "Wake Plant",
+	TreadmillLevel = "Treadmill Level",
 }
 
 function Purchases.title(key: string): string

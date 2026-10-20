@@ -42,8 +42,8 @@ end
 function Hud.start()
 	local gui = Ui.screen("Hud", Players.LocalPlayer:WaitForChild("PlayerGui"), 1)
 
-	-- Top-left: money and income.
-	local money = Ui.panel("Money", UDim2.fromOffset(230, 84), gui)
+	-- Top-centre: money, income and speed.
+	local money = Ui.panel("Money", UDim2.fromOffset(230, 108), gui)
 	money.AnchorPoint = Vector2.new(0.5, 0)
 	money.Position = UDim2.new(0.5, 0, 0, 8)
 	padded(money, 8)
@@ -53,6 +53,12 @@ function Hud.start()
 	moneyText.TextXAlignment = Enum.TextXAlignment.Left
 	local incomeText = Ui.label("Income", "+$0/s", false, row("IncomeRow", money, 2, 24))
 	incomeText.TextXAlignment = Enum.TextXAlignment.Left
+	local speedText = Ui.label("Speed", "👟 0 Speed", false, row("SpeedRow", money, 3, 22))
+	speedText.TextColor3 = Color3.new(1, 1, 1)
+	speedText.TextXAlignment = Enum.TextXAlignment.Left
+	State.onSpeed(function(total)
+		speedText.Text = `👟 {Format.short(total)} Speed`
+	end)
 
 	-- Top-right: day/night + countdown, area, event.
 	local right = Instance.new("Frame")

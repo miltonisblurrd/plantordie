@@ -26,6 +26,7 @@ local Sfx = require(script.Parent.Sfx)
 local Effects = require(script.Parent.Effects)
 local Feedback = require(script.Parent.Feedback)
 local SettingsPanel = require(script.Parent.SettingsPanel)
+local Treadmill = require(script.Parent.Treadmill)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
 
@@ -67,4 +68,5 @@ Collection.start(right)
 EventShop.start(right)
 SettingsPanel.start(right)
 Feedback.start()
+Treadmill.start()
 State.start()
