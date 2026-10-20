@@ -22,6 +22,7 @@ local list: { Product } = {
 	{ Key = "GrowthBoost", Id = 3719422286, PriceRobux = 4, Benefit = "2x growth speed for every plant for 30 minutes (stacks time if already active).", Seconds = 30 * 60 },
 	{ Key = "HalloweenPack", Id = 3719422493, PriceRobux = 149, Benefit = "One Halloween Seed Pack: 1 seed rolled from the odds table shown.", Event = "Halloween2026" },
 	{ Key = "Unstun", Id = 3719797623, PriceRobux = 11, Benefit = "Instantly wakes the stunned plant you picked. It can attack again and starts earning money right away." },
+	{ Key = "TreadmillLevel", Id = 0, PriceRobux = 499, Benefit = "Upgrade your treadmill by one level." },
 }
 
 local byKey: { [string]: Product } = {}

@@ -20,16 +20,18 @@ local Events = require(ReplicatedStorage.Shared.Events)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Products = require(ReplicatedStorage.Shared.Products)
+local TreadmillData = require(ReplicatedStorage.Shared.Treadmill)
 local Core = require(script.Core)
 local Data = require(script.Parent.Data)
 local Event = require(script.Parent.Event)
 local Fusion = require(script.Parent.Fusion)
 local Garden = require(script.Parent.Garden)
 local Net = require(script.Parent.Net)
+local Plots = require(script.Parent.Plots)
 
 local Purchases = {}
 
-local CREDITABLE: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true }
+local CREDITABLE: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true, TreadmillLevel = true }
 local SKIP_MACHINE: { [string]: string } = { NeonSkip = "Neon", MegaSkip = "Mega" }
 
 -- Applies a product's effect to the profile. Returns a message, or nil if there was nothing to
@@ -58,6 +60,11 @@ local function apply(p: Data.Profile, key: string, arg: string?, bank: boolean):
 		if e then
 			return `{e.Pack.Name}: you got {Event.packNames(Event.grantPack(p, e))}!`
 		end
+	elseif key == "TreadmillLevel" then
+		if p.treadmillLevel < TreadmillData.MaxLevel then
+			p.treadmillLevel += 1
+			return `Treadmill upgraded to Lv. {p.treadmillLevel}!`
+		end
 	end
 	if bank and CREDITABLE[key] then
 		p.credits[key] = (p.credits[key] or 0) + 1
@@ -81,6 +88,7 @@ local function grant(player: Player, key: string, arg: string?)
 		msg = apply(p, key, arg, true)
 	end)
 	Fusion.refresh(player)
+	Plots.refresh(player)
 	if msg then
 		Net.notify(player, msg)
 	end
@@ -155,6 +163,7 @@ local function useCredit(player: Player, key: string, arg: string?)
 		end
 	end)
 	Fusion.refresh(player)
+	Plots.refresh(player)
 	Net.notify(player, msg or "Nothing to use that on right now. Your credit is kept.", if msg then "info" else "warn")
 end
 

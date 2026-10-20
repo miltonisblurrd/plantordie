@@ -134,6 +134,9 @@ function Sync.push(player: Player)
 		credits = d.credits,
 		collection = Discovery.of(d :: any),
 		growthBoostEndsAt = d.growthBoostEndsAt,
+		speed = d.speed,
+		treadmillLevel = d.treadmillLevel,
+		trails = d.trails,
 		persistent = Data.mode() == "DataStore",
 	})
 end

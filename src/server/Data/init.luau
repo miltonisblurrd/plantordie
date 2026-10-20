@@ -254,13 +254,17 @@ function Data.onChanged(cb: (Player, Session) -> ())
 	table.insert(changedCallbacks, cb)
 end
 
--- Mutate a loaded profile and notify listeners (HUD sync etc.).
-function Data.update(player: Player, mutate: (Profile) -> ()): boolean
+-- Mutate a loaded profile and notify listeners (HUD sync etc.). `quiet` skips the listeners
+-- (and so the full StateSync push); the caller must sync the HUD itself.
+function Data.update(player: Player, mutate: (Profile) -> (), quiet: boolean?): boolean
 	local s = Data.get(player)
 	if not s then
 		return false
 	end
 	mutate(s.data)
+	if quiet then
+		return true
+	end
 	for _, cb in changedCallbacks do
 		task.spawn(cb, player, s)
 	end
