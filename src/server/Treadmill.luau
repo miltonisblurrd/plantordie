@@ -31,6 +31,17 @@ local function humanoidOf(player: Player): (Humanoid?, BasePart?)
 	return nil, nil
 end
 
+-- Every WalkSpeed write goes through applyWalkSpeed: speed stat x scale (carrying), 0 while stunned.
+local speedScale: (Player) -> number = function(_player: Player)
+	return 1
+end
+local stunnedUntil: { [Player]: number } = {}
+local savedJump: { [Player]: { power: number, height: number } } = {}
+
+function Treadmill.setSpeedScale(fn: (Player) -> number)
+	speedScale = fn
+end
+
 -- Writes WalkSpeed only when it moved by more than WalkSpeedMinDelta.
 function Treadmill.applyWalkSpeed(player: Player, force: boolean?)
 	local session = Data.get(player)
@@ -38,10 +49,40 @@ function Treadmill.applyWalkSpeed(player: Player, force: boolean?)
 	if not session or not hum then
 		return
 	end
-	local target = Speed.walkSpeedFor(session.data.speed)
+	local target = if (stunnedUntil[player] or 0) > os.clock() then 0 else Speed.walkSpeedFor(session.data.speed) * speedScale(player)
 	if force or math.abs(hum.WalkSpeed - target) >= Config.Treadmill.WalkSpeedMinDelta then
 		hum.WalkSpeed = target
 	end
+end
+
+-- No walking or jumping for `seconds`; a newer stun extends it.
+function Treadmill.stun(player: Player, seconds: number)
+	local hum = humanoidOf(player)
+	if not hum then
+		return
+	end
+	local untilT = os.clock() + seconds
+	if not savedJump[player] then
+		savedJump[player] = { power = hum.JumpPower, height = hum.JumpHeight }
+	end
+	stunnedUntil[player] = untilT
+	hum.JumpPower = 0
+	hum.JumpHeight = 0
+	Treadmill.applyWalkSpeed(player, true)
+	task.delay(seconds, function()
+		if stunnedUntil[player] ~= untilT then
+			return
+		end
+		stunnedUntil[player] = nil
+		local saved = savedJump[player]
+		savedJump[player] = nil
+		local h = humanoidOf(player)
+		if h and saved then
+			h.JumpPower = saved.power
+			h.JumpHeight = saved.height
+		end
+		Treadmill.applyWalkSpeed(player, true)
+	end)
 end
 
 local function onBelt(belt: BasePart, pos: Vector3): boolean
@@ -124,6 +165,8 @@ function Treadmill.start()
 		end
 	end)
 	Players.PlayerRemoving:Connect(function(player)
+		stunnedUntil[player] = nil
+		savedJump[player] = nil
 		local c = charConns[player]
 		if c then
 			c:Disconnect()

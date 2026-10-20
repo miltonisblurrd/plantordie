@@ -1,7 +1,8 @@
 --!strict
 -- Dig spots and the Dig remote (spec §5). The client only names a spot; the server checks the
 -- spot exists and is available, the player is close, owns the biome, holds a good enough
--- shovel and is off cooldown, then rolls the drop and puts it in the expedition bag (A6).
+-- shovel and is off cooldown, then rolls the drop and reveals it on the spot for the digger to
+-- pick up (Carry). Digging alone never wakes a guardian.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,7 +13,7 @@ local Plants = require(ReplicatedStorage.Shared.Plants)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
-local Expedition = require(script.Parent.Expedition)
+local Carry = require(script.Parent.Carry)
 local Net = require(script.Parent.Net)
 
 type Spot = {
@@ -94,9 +95,11 @@ local function handle(player: Player, spotId: string)
 		spot.hp = spot.maxHp
 		setAvailable(spot, true)
 	end)
-	if Expedition.add(player, drop.Plant, 1) then
-		Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity)
-	end
+	Data.update(player, function(p)
+		p.stats.seedsDug += 1
+	end, true)
+	Carry.reveal(player, drop.Plant, drop.Rarity, spot.biomeId, spot.position, spot.model)
+	Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity)
 end
 
 function Dig.start()

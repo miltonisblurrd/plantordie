@@ -47,6 +47,15 @@ function Sync.setEventProvider(fn: (Player) -> { [string]: any }?)
 	eventProvider = fn
 end
 
+-- The seed the player is carrying, owned by Carry.
+local carryProvider: (Player) -> { [string]: any }? = function(_player: Player)
+	return nil
+end
+
+function Sync.setCarryProvider(fn: (Player) -> { [string]: any }?)
+	carryProvider = fn
+end
+
 function Sync.houseHp(player: Player): number
 	local rt = runtime[player]
 	return if rt then rt.houseHp else 0
@@ -127,7 +136,7 @@ function Sync.push(player: Player)
 		areaBiome = rt.areaBiome,
 		shovelTier = d.shovels.equipped,
 		shovels = d.shovels,
-		bag = d.expedition,
+		carrying = carryProvider(player),
 		defense = defenseProvider(player),
 		event = eventProvider(player),
 		water = d.water,
