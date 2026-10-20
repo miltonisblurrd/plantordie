@@ -443,6 +443,134 @@ do
 	print(("treadmill + sign: %d parts per plot, clear of garden, houses, spawn"):format(n))
 end
 
+print("\n== Shops: trails, shovels, v8 data, hub stalls ==")
+do
+	local Trails = require(Shared.Trails)
+	local Treadmill = require(Shared.Treadmill)
+	local Schema = require(Server.Data.Schema)
+	local want = {
+		{ "Starter", 0, 1 }, { "Nature", 5000, 2 }, { "Lightning", 50000, 4 }, { "Inferno", 250000, 6 },
+		{ "Mystic", 1000000, 8 }, { "Rainbow", 5000000, 12 }, { "Golden", 25000000, 18 }, { "Galaxy", 100000000, 25 },
+		{ "Void", 500000000, 35 }, { "Divine", 2500000000, 50 },
+	}
+	assert(#Trails.List == 10, "need 10 trails")
+	for i, w in want do
+		local t = Trails.List[i]
+		assert(t.Id == w[1] and t.Price == w[2] and t.Multiplier == w[3] and Trails.ById[w[1]] == t, "trail " .. i .. " mismatch")
+		assert(Treadmill.multiplierFor(t.Id) == w[3] and #t.Colors >= 2 and t.Kind ~= "")
+	end
+	print("10 trails: ids, prices and multipliers exact; Treadmill.multiplierFor reads Shared.Trails")
+
+	local shovelWant = {
+		{ "Starter Shovel", 0 }, { "Steel Shovel", 25000 }, { "Crystal Shovel", 250000 }, { "Inferno Shovel", 2500000 },
+		{ "Emerald Shovel", 25000000 }, { "Plasma Shovel", 250000000 }, { "Toxic Shovel", 2500000000 },
+		{ "Ancient Shovel", 25000000000 }, { "Cosmic Shovel", 250000000000 }, { "Divine Shovel", 2500000000000 },
+	}
+	assert(#Upgrades.Shovels == 10, "need 10 shovels")
+	local dmg = {}
+	for i, w in shovelWant do
+		local s = Upgrades.Shovels[i]
+		assert(s.Tier == i and s.Name == w[1] and s.Cost == w[2], "shovel " .. i .. " mismatch")
+		assert(s.ToughTier == math.min(i, 5) and s.LuckBonus <= Config.Dig.MaxLuck and s.Material ~= nil and s.Accent ~= nil)
+		if i > 1 then
+			local p = Upgrades.Shovels[i - 1]
+			assert(s.Damage > p.Damage and s.DigSeconds < p.DigSeconds and s.LuckBonus >= p.LuckBonus and s.Cost > p.Cost, "shovel " .. i .. " must improve")
+		end
+		table.insert(dmg, tostring(s.Damage))
+	end
+	assert(Upgrades.Shovels[1].DigSeconds == 3 and Upgrades.Shovels[10].DigSeconds == 0.5 and Upgrades.Shovels[10].LuckBonus == Config.Dig.MaxLuck)
+	print("10 shovels: names and prices exact; damage " .. table.concat(dmg, ",") .. "; dig 3s -> 0.5s; luck 0 -> " .. Config.Dig.MaxLuck)
+
+	assert(Config.Data.SchemaVersion == 8)
+	local v7 = Schema.default()
+	v7.version, v7.shovelTier, v7.shovels = 7, 4, nil
+	v7.trails = { owned = { Starter = true, Nature = true }, equipped = "Nature" }
+	local m = assert(Schema.migrate(v7))
+	assert(m.version == 8 and m.shovels.equipped == 4 and m.shovelTier == 4)
+	for t = 1, 10 do
+		assert((m.shovels.owned[tostring(t)] == true) == (t <= 4), "v7 tier 4 must own exactly 1..4")
+	end
+	assert(m.trails.equipped == "Nature" and m.trails.owned.Nature)
+	for k in m.shovels.owned do assert(type(k) == "string", "owned keys must be strings for DataStore") end
+	local junk = Schema.default()
+	junk.version, junk.shovelTier = 7, "x"
+	local mj = assert(Schema.migrate(junk))
+	assert(mj.shovels.equipped == 1 and mj.shovels.owned["1"])
+	local v8 = Schema.default()
+	v8.shovels = { owned = { ["1"] = true, ["3"] = true }, equipped = 7 }
+	local m8 = assert(Schema.migrate(v8))
+	assert(m8.shovels.equipped == 1 and m8.shovelTier == 1 and m8.shovels.owned["3"], "unowned equipped falls back")
+	local bad = Schema.default()
+	bad.shovels = "junk"
+	assert(assert(Schema.migrate(bad)).shovels.owned["1"])
+	local fresh = Schema.default()
+	assert(fresh.shovels.equipped == 1 and fresh.shovels.owned["1"] and fresh.shovels.owned ~= Schema.default().shovels.owned)
+	print("schema v7 -> v8 migration keeps shovel progress (tier 4 -> owns 1..4, equips 4); bad records repaired")
+
+	-- Footprints: discs/cylinders by diameter, everything else by its larger horizontal side.
+	local DISCS = { FountainBase = true, FountainWater = true, Plaza = true, ShopCircle = true }
+	local function foot(p)
+		local half = if DISCS[p.Name] then math.max(p.Size.Y, p.Size.Z) / 2 else math.max(p.Size.X, p.Size.Z) / 2
+		local c = p.CFrame.Position
+		return c.X - half, c.X + half, c.Z - half, c.Z + half
+	end
+	local function hits(a, b)
+		local ax0, ax1, az0, az1 = foot(a)
+		local bx0, bx1, bz0, bz1 = foot(b)
+		return ax0 < bx1 and ax1 > bx0 and az0 < bz1 and az1 > bz0
+	end
+	local scratch = newInstance("Folder", "ShopScratch")
+	local hub = Hub.build(scratch)
+	local decor = require(Server.World.Builders.Events.Halloween).build(scratch)
+	local stallParts, others = {}, {}
+	for _, d in hub:GetDescendants() do
+		if d:IsA("BasePart") then
+			local inStall = false
+			local node = d.Parent
+			while node do
+				if type(node.Name) == "string" and node.Name:match("^Stall_") then inStall = true end
+				node = node.Parent
+			end
+			if inStall then
+				table.insert(stallParts, d)
+			elseif d.Name ~= "Baseplate" and d.Name ~= "Plaza" and d.Name ~= "PlotPath" then
+				table.insert(others, d)
+			end
+		end
+	end
+	for _, d in decor:GetDescendants() do
+		if d:IsA("BasePart") then table.insert(others, d) end
+	end
+	local circlesSeen = {}
+	for _, s in stallParts do
+		if s.Name == "ShopCircle" then
+			circlesSeen[s:GetAttribute("ShopId")] = s:GetAttribute("Radius")
+			local title = s:FindFirstChild("Title")
+			assert(title and title:FindFirstChildOfClass("TextLabel"), "stall title missing")
+		end
+		for _, o in others do
+			assert(not hits(s, o), ("%s (%s) overlaps %s"):format(s.Name, s.Parent.Name, o.Name))
+		end
+	end
+	assert(circlesSeen.Trails == Config.Shops.Radius and circlesSeen.Shovels == Config.Shops.Radius, "both circles tagged")
+	local P = Config.Plot
+	for i = 1, Config.World.PlotCount do
+		local c = Layout.plotCFrame(i).Position
+		for _, s in stallParts do
+			local x0, x1, z0, z1 = foot(s)
+			assert(not (x0 < c.X + P.Width / 2 and x1 > c.X - P.Width / 2 and z0 < c.Z + P.Depth / 2 and z1 > c.Z - P.Depth / 2), s.Name .. " overlaps plot " .. i)
+		end
+	end
+	local labels = {}
+	for _, s in stallParts do
+		if s.Name == "ShopCircle" then
+			labels[s:GetAttribute("ShopId")] = s:FindFirstChild("Title"):FindFirstChildOfClass("TextLabel").Text
+		end
+	end
+	assert(labels.Trails == "Trails Shop" and labels.Shovels == "Shovel Shop")
+	print(("hub stalls: %d parts (%d each), clear of %d hub/Halloween parts (machines, spawn, fountain, trees) and all 8 plots"):format(#stallParts, #stallParts // 2, #others))
+end
+
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
 local Core = require(Server.Defense.Core)
 local Zombies = require(Shared.Zombies)
