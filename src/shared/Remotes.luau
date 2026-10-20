@@ -44,6 +44,7 @@ local list: { RemoteDef } = {
 	{ Name = "EventDig", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "UpgradeTreadmill", Kind = "Event", Rate = 2, Burst = 3 },
 	{ Name = "DropSeed", Kind = "Event", Rate = 1, Burst = 2 },
+	{ Name = "ClaimIndex", Kind = "Event", Rate = 1, Burst = 3 },
 }
 
 local byName: { [string]: RemoteDef } = {}

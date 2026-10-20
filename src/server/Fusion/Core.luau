@@ -4,6 +4,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Discovery = require(ReplicatedStorage.Shared.Discovery)
 local FusionData = require(ReplicatedStorage.Shared.Fusion)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 
@@ -114,7 +115,7 @@ function Core.claim(profile: ProfileLike, machineId: string, runId: number, now:
 	local id = tostring(profile.nextItemId)
 	profile.nextItemId += 1
 	profile.plants[id] = { id = id, species = species, rarity = rarity, size = size, variant = m.Output }
-	profile.collection[species .. "|" .. m.Output] = true
+	Discovery.record(profile, species, m.Output)
 	-- The slot empties only after the result plant exists.
 	slot.last = { runId = runId, itemId = id, claimed = true }
 	slot.state = "empty"

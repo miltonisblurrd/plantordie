@@ -13,6 +13,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Events = require(ReplicatedStorage.Shared.Events)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Data = require(script.Parent.Data)
+local Index = require(script.Parent.Index)
 local Defense = require(script.Parent.Defense)
 local Fusion = require(script.Parent.Fusion)
 local GuardianAI = require(script.Parent.GuardianAI)
@@ -78,6 +79,7 @@ function Event.grantPack(p: Data.Profile, e: Events.Event): { string }
 	for _ = 1, e.Pack.Seeds do
 		local species = Events.roll(e.Pack, rng:NextNumber())
 		p.seeds[species] = (p.seeds[species] or 0) + 1
+		Index.record(p, species)
 		table.insert(got, species)
 	end
 	return got

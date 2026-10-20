@@ -29,6 +29,7 @@ local Zombies = require(ReplicatedStorage.Shared.Zombies)
 local Core = require(script.Core)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
+local Index = require(script.Parent.Index)
 local DayNight = require(script.Parent.DayNight)
 local Garden = require(script.Parent.Garden)
 local Net = require(script.Parent.Net)
@@ -441,6 +442,7 @@ local function endWave(player: Player)
 		p.stats.nightsSurvived += 1
 		if drop then
 			p.seeds[drop.Plant] = (p.seeds[drop.Plant] or 0) + 1
+			Index.record(p, drop.Plant)
 		end
 	end)
 	for _, cb in survivedCallbacks do

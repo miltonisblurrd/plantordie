@@ -15,6 +15,7 @@ local Houses = require(ReplicatedStorage.Shared.Houses)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Data = require(script.Parent.Data)
+local Index = require(script.Parent.Index)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
 local PlotBuilder = require(script.Parent.World.Builders.Plot)
@@ -242,6 +243,7 @@ local function onAssigned(player: Player)
 	Data.update(player, function(p)
 		if grantRescue then
 			p.seeds.Sunpetal = (p.seeds.Sunpetal or 0) + 1
+			Index.record(p, "Sunpetal")
 		end
 		if earned > 0 then
 			p.money += earned
@@ -250,6 +252,7 @@ local function onAssigned(player: Player)
 		if grantStarter then
 			for species, n in G.StarterSeeds do
 				p.seeds[species] = (p.seeds[species] or 0) + n
+				Index.record(p, species)
 			end
 			p.starterGranted = true
 		end
@@ -362,7 +365,7 @@ local function plantSeed(player: Player, key: string, species: string)
 			uid = tostring(p.nextItemId),
 		}
 		p.nextItemId += 1
-		p.collection[species .. "|Normal"] = true
+		Index.record(p, species)
 		p.stats.plantsPlanted += 1
 	end)
 	render(player, key)
@@ -396,6 +399,7 @@ local function placePlant(player: Player, key: string, itemId: string)
 			matured = true,
 			uid = itemId,
 		}
+		Index.record(p, item.species, item.variant)
 	end)
 	render(player, key)
 	Net.notify(player, `Placed {Plants.ById[item.species].Name}.`)
@@ -426,8 +430,10 @@ local function removePlant(player: Player, key: string)
 				size = rec.size,
 				variant = rec.variant,
 			}
+			Index.record(p, rec.species, rec.variant)
 		elseif G.UnripeSeedRefund > 0 then
 			p.seeds[rec.species] = (p.seeds[rec.species] or 0) + G.UnripeSeedRefund
+			Index.record(p, rec.species)
 		end
 	end)
 	render(player, key)
