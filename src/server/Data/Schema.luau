@@ -62,8 +62,7 @@ export type Profile = {
 	speed: number,
 	treadmillLevel: number,
 	trails: { owned: { [string]: boolean }, equipped: string },
-	-- Unbanked dig rewards (species -> count). Saved so a disconnect never wipes them; only a
-	-- guardian catch clears it. Banked into `seeds` at your plot or the hub fountain.
+	-- Legacy unbanked bag, always empty since v9 (banked into `seeds` by the migration).
 	expedition: { [string]: number },
 	water: { channel: boolean, sprinkler: boolean, pond: boolean },
 	fusion: { Neon: FusionSlot, Mega: FusionSlot },
@@ -233,6 +232,22 @@ local migrations: { [number]: (any) -> any } = {
 		end
 		d.shovels = { owned = owned, equipped = tier }
 		d.version = 8
+		return d
+	end,
+	[8] = function(d)
+		-- v9 carries one seed at a time and never saves it; the old bag is banked into seeds.
+		if type(d.expedition) == "table" then
+			if type(d.seeds) ~= "table" then
+				d.seeds = {}
+			end
+			for species, c in d.expedition do
+				if type(species) == "string" and type(c) == "number" and c > 0 then
+					d.seeds[species] = (if type(d.seeds[species]) == "number" then d.seeds[species] else 0) + math.floor(c)
+				end
+			end
+		end
+		d.expedition = {}
+		d.version = 9
 		return d
 	end,
 }
