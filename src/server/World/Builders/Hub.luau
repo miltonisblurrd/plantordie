@@ -1,6 +1,6 @@
 --!strict
 -- Central plaza: bright grass disc, stone ring for the gates, chunky trees, geometric rocks,
--- a fountain, a hub spawn, a world baseplate, and paths out to every plot.
+-- a fountain, a hub spawn, the Trails and Shovel market stalls, a world baseplate, and paths out to every plot.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -20,6 +20,68 @@ local function disc(name: string, radius: number, y: number, thickness: number, 
 		Size = Vector3.new(thickness, radius * 2, radius * 2),
 		CFrame = CFrame.new(0, y - thickness / 2, 0) * CFrame.Angles(0, 0, math.rad(90)),
 	})
+end
+
+local WOOD = Color3.fromHex("#A86A32")
+
+type StallLook = { title: string, stripeA: Color3, stripeB: Color3, circle: Color3, text: Color3, stroke: Color3 }
+
+-- Axis-aligned so the harness bounding checks match the game; the open side faces the hub centre.
+local function stall(id: string, at: Vector3, look: StallLook, parent: Instance): Model
+	local m = Parts.model(`Stall_{id}`, parent)
+	local f = if at.X < 0 then 1 else -1
+	local base = Vector3.new(at.X, W.GroundY, at.Z)
+	local function put(name: string, fwd: number, y: number, side: number, depth: number, h: number, width: number, color: Color3, collide: boolean?): BasePart
+		return Parts.make({
+			Name = name, Parent = m, Color = color, CanCollide = collide,
+			Size = Vector3.new(depth, h, width), CFrame = CFrame.new(base + Vector3.new(fwd * f, y, side)),
+		})
+	end
+	for _, c in { { -2.6, -4.6 }, { -2.6, 4.6 }, { 2.6, -4.6 }, { 2.6, 4.6 } } do
+		put("Post", c[1], 3.6, c[2], 0.8, 7.2, 0.8, WOOD)
+	end
+	put("CounterTop", 2.2, 3.3, 0, 2.6, 0.6, 10.6, WOOD)
+	put("CounterFront", 3.2, 1.5, 0, 0.5, 3, 10, WOOD)
+	put("BackRail", -2.6, 2.2, 0, 0.5, 0.6, 9.2, WOOD)
+	local stripes = 6
+	local stripeW = 11.4 / stripes
+	for i = 1, stripes do
+		put("Canopy", 0, 7.5, -5.7 + stripeW * (i - 0.5), 7.6, 0.6, stripeW, if i % 2 == 1 then look.stripeA else look.stripeB, false)
+	end
+
+	local circle = Parts.make({
+		Name = "ShopCircle", Parent = m, Color = look.circle, Material = Enum.Material.Neon,
+		Shape = Enum.PartType.Cylinder, CanCollide = false, Transparency = 0.4,
+		Size = Vector3.new(0.2, Config.Shops.Radius * 2, Config.Shops.Radius * 2),
+		CFrame = CFrame.new(base + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+	})
+	circle.CanQuery = false
+	circle.CanTouch = false
+	circle.CastShadow = false
+	circle:SetAttribute("ShopId", id)
+	circle:SetAttribute("Radius", Config.Shops.Radius)
+
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "Title"
+	gui.Size = UDim2.new(20, 0, 4.5, 0)
+	gui.StudsOffsetWorldSpace = Vector3.new(0, 14, 0)
+	gui.MaxDistance = 160
+	gui.LightInfluence = 0
+	gui.Parent = circle
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.FredokaOne
+	label.TextScaled = true
+	label.Text = look.title
+	label.TextColor3 = look.text
+	label.Parent = gui
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = look.stroke
+	stroke.Thickness = 4
+	stroke.LineJoinMode = Enum.LineJoinMode.Round
+	stroke.Parent = label
+	return m
 end
 
 function Hub.build(parent: Instance): Model
@@ -78,6 +140,15 @@ function Hub.build(parent: Instance): Model
 	for _, machine in Shared.all() do
 		machine:SetAttribute("Shared", true)
 	end
+
+	stall("Trails", Config.Shops.Trails, {
+		title = "Trails Shop", stripeA = Color3.fromHex("#3BE23B"), stripeB = Color3.fromHex("#FFFFFF"),
+		circle = Color3.fromHex("#7CFF4F"), text = Color3.fromHex("#5CFF3A"), stroke = Color3.fromHex("#0B3D0B"),
+	}, m)
+	stall("Shovels", Config.Shops.Shovels, {
+		title = "Shovel Shop", stripeA = Color3.fromHex("#2FB5FF"), stripeB = Color3.fromHex("#FFFFFF"),
+		circle = Color3.fromHex("#3FD0FF"), text = Color3.fromHex("#3FD8FF"), stroke = Color3.fromHex("#0B2340"),
+	}, m)
 
 	local rng = Random.new(7)
 	local leafColors = {
