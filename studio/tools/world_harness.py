@@ -659,7 +659,7 @@ do
 	local Schema = require(Server.Data.Schema)
 	local CCore = require(Server.Carry.Core)
 	local G = Config.Guardian
-	assert(G.SpeedFactor == 0.97 and G.PatrolFactor == 0.5 and G.MaxChaseSeconds == 60 and Config.Carry.SpeedFactor == 0.9)
+	assert(G.SpeedFactor == 0.87 and G.PatrolFactor == 0.5 and G.MaxChaseSeconds == 60 and Config.Carry.SpeedFactor == 0.9)
 	assert(Guardians.ByBiome.MushroomForest.Name == "Fungal Brute", "Mushroom Forest guardian is Fungal Brute")
 	local names, prev = {}, -1
 	print("  biome              rec speed  player  guardian  patrol  carrying  margin(carry)")
@@ -671,9 +671,13 @@ do
 		local gs = Speed.guardianSpeedFor(b.RecommendedSpeed)
 		assert(gs >= prev, "guardianSpeedFor must be monotonic at " .. b.Id)
 		assert(gs >= 15.5 and gs <= 40, ("%s guardian speed %.2f outside 15.5..40"):format(b.Id, gs))
-		assert(player > gs, b.Id .. ": a player at recommended speed must outrun the guardian")
 		prev = gs
 		local carry = player * Config.Carry.SpeedFactor
+		assert(carry > gs, b.Id .. ": a carrier at recommended speed must outrun the guardian")
+		if b.Index > 1 then
+			local under = Speed.walkSpeedFor(b.RecommendedSpeed / 10) * Config.Carry.SpeedFactor
+			assert(under <= gs, b.Id .. ": a carrier at 1/10 of recommended must not outrun the guardian")
+		end
 		print(("  %-17s %10s  %6.2f  %8.2f  %6.2f  %8.2f  %+6.2f"):format(b.Id, tostring(b.RecommendedSpeed), player, gs, gs * G.PatrolFactor, carry, carry - gs))
 	end
 	assert(#Guardians.List == 15)

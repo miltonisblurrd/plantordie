@@ -92,7 +92,7 @@ local Config = {
 
 	Guardian = {
 		TickSeconds = 0.1,
-		SpeedFactor = 0.97, -- chase speed = walkSpeedFor(biome RecommendedSpeed) x this
+		SpeedFactor = 0.87, -- chase speed = walkSpeedFor(biome RecommendedSpeed) x this
 		PatrolFactor = 0.5, -- patrol speed = chase speed x this
 		MaxChaseSeconds = 60,
 		StuckSeconds = 3, -- no progress toward the target for this long -> give up, return
