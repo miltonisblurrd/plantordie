@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 8,
+		SchemaVersion = 9,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -76,15 +76,31 @@ local Config = {
 	},
 
 	Bank = {
-		HubRadius = 26, -- fountain bank point; your own plot also banks
+		HubRadius = 26, -- hub safe area around the fountain; guardians give up a chase here
 		CheckSeconds = 0.5,
+	},
+
+	-- One carried seed per player. Only your own plot banks it.
+	Carry = {
+		SpeedFactor = 0.9, -- WalkSpeed multiplier while carrying
+		RevealSeconds = 20, -- a dug seed waits this long on its dirt spot
+		DropSeconds = 20, -- a dropped seed's countdown
+		PickupRange = 10,
+		TouchRange = 4, -- walking over a seed picks it up
+		CheckSeconds = 0.25,
 	},
 
 	Guardian = {
 		TickSeconds = 0.1,
-		StuckSeconds = 3, -- no progress toward the target for this long -> give up, patrol
+		SpeedFactor = 0.97, -- chase speed = walkSpeedFor(biome RecommendedSpeed) x this
+		PatrolFactor = 0.5, -- patrol speed = chase speed x this
+		MaxChaseSeconds = 60,
+		StuckSeconds = 3, -- no progress toward the target for this long -> give up, return
 		StuckMinProgress = 1.5,
-		CooldownSeconds = 3, -- idle after a catch or a loss
+		CooldownSeconds = 3, -- no catches for this long after a catch
+		KnockbackHorizontal = 50,
+		KnockbackUp = 35,
+		StunSeconds = 1.5,
 		HipHeight = 3,
 		DangerZoneCount = 2,
 		DangerZoneRadius = 22,

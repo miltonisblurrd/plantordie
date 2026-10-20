@@ -14,7 +14,7 @@ local list: { RemoteDef } = {
 	{ Name = "DayNight", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "Notify", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "DigResult", Kind = "Event", Rate = 0, Burst = 0 },
-	{ Name = "Danger", Kind = "Event", Rate = 0, Burst = 0 },
+	{ Name = "Chase", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "CombatFx", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "SpeedGain", Kind = "Event", Rate = 0, Burst = 0 },
 	-- client -> server
@@ -43,6 +43,7 @@ local list: { RemoteDef } = {
 	{ Name = "EventBuyPack", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "EventDig", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "UpgradeTreadmill", Kind = "Event", Rate = 2, Burst = 3 },
+	{ Name = "DropSeed", Kind = "Event", Rate = 1, Burst = 2 },
 }
 
 local byName: { [string]: RemoteDef } = {}
