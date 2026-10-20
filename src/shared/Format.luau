@@ -1,9 +1,9 @@
 --!strict
 local Format = {}
 
-local SUFFIXES = { "", "K", "M", "B", "T", "Qa", "Qi" }
+local SUFFIXES = { "", "K", "M", "B", "T", "QA", "Qi" }
 
-function Format.money(n: number): string
+local function suffixed(n: number): (string, string)
 	local sign = if n < 0 then "-" else ""
 	n = math.abs(n)
 	local i = 1
@@ -12,11 +12,22 @@ function Format.money(n: number): string
 		i += 1
 	end
 	if i == 1 then
-		return sign .. "$" .. tostring(math.floor(n))
+		return sign, tostring(math.floor(n))
 	end
 	local s = if n >= 100 then string.format("%d", math.floor(n)) else string.format("%.1f", math.floor(n * 10) / 10)
 	s = s:gsub("%.0$", "")
-	return sign .. "$" .. s .. SUFFIXES[i]
+	return sign, s .. SUFFIXES[i]
+end
+
+function Format.money(n: number): string
+	local sign, s = suffixed(n)
+	return sign .. "$" .. s
+end
+
+-- Same suffixes without "$": "96K", "1.2QA".
+function Format.short(n: number): string
+	local sign, s = suffixed(n)
+	return sign .. s
 end
 
 function Format.clock(seconds: number): string
