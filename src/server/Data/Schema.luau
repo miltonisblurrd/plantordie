@@ -56,6 +56,9 @@ export type Profile = {
 	planted: { [string]: PlantedTile }, -- tile key "lane_col" -> plant
 	shovelTier: number,
 	portalTier: number,
+	speed: number,
+	treadmillLevel: number,
+	trails: { owned: { [string]: boolean }, equipped: string },
 	-- Unbanked dig rewards (species -> count). Saved so a disconnect never wipes them; only a
 	-- guardian catch clears it. Banked into `seeds` at your plot or the hub fountain.
 	expedition: { [string]: number },
@@ -113,6 +116,9 @@ function Schema.default(): Profile
 		planted = {},
 		shovelTier = Config.Start.ShovelTier,
 		portalTier = 1,
+		speed = 0,
+		treadmillLevel = 1,
+		trails = { owned = { Starter = true }, equipped = "Starter" },
 		expedition = {},
 		water = { channel = false, sprinkler = false, pond = false },
 		fusion = { Neon = idleSlot(), Mega = idleSlot() },
@@ -204,6 +210,16 @@ local migrations: { [number]: (any) -> any } = {
 		d.version = 6
 		return d
 	end,
+	[6] = function(d)
+		-- v7 adds speed, the treadmill level and trails. A non-table `trails` would block reconcile.
+		if type(d.trails) ~= "table" then
+			d.trails = nil
+		elseif type(d.trails.owned) ~= "table" then
+			d.trails.owned = nil
+		end
+		d.version = 7
+		return d
+	end,
 }
 
 -- Returns a migrated, reconciled copy, or nil + reason if the record must not be touched.
@@ -228,6 +244,10 @@ function Schema.migrate(old: any): (Profile?, string?)
 		v = data.version
 	end
 	reconcile(data, Schema.default() :: any)
+	-- reconcile recursed into the non-empty owned map, which only ever adds Starter (always owned).
+	if type(data.trails.equipped) ~= "string" or not data.trails.owned[data.trails.equipped] then
+		data.trails.equipped = "Starter"
+	end
 	return data :: Profile, nil
 end
 

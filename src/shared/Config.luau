@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 6,
+		SchemaVersion = 7,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -111,6 +111,12 @@ local Config = {
 		DayClockStart = 6.5,
 		DayClockEnd = 18.5,
 		NightClockEnd = 30.5, -- wraps past midnight to 06:30
+	},
+
+	Treadmill = {
+		TickSeconds = 1,
+		HeightTolerance = 6, -- studs above the belt top the root part may be
+		WalkSpeedMinDelta = 0.25, -- skip WalkSpeed writes smaller than this
 	},
 
 	Sync = {
