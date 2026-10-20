@@ -90,6 +90,18 @@ local Config = {
 		CheckSeconds = 0.25,
 	},
 
+	-- Player-vs-player bat. Only ever moves the victim's one carried seed.
+	Bat = {
+		Cooldown = 1.2,
+		Range = 7, -- root to root
+		ConeDot = 0.3, -- attacker LookVector . flat direction to victim must exceed this
+		KnockH = 45,
+		KnockUp = 25,
+		StunSeconds = 0.8,
+		StealWindow = 3, -- seconds the attacker may also pick up the knocked-loose seed
+		MaxVel = 70,
+	},
+
 	Guardian = {
 		TickSeconds = 0.1,
 		SpeedFactor = 0.87, -- chase speed = walkSpeedFor(biome RecommendedSpeed) x this

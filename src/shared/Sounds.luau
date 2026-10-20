@@ -18,6 +18,8 @@ Sounds.Ids = {
 	FusionDone = 1837272652, -- APMOfficial "Magic Wand"
 	GuardianWarning = 1839909461, -- APMOfficial "Horror Sting"
 	Music = 15675069601, -- Roblox "Roblox_UI_Loop_Calm_Music"
+	Whoosh = "rbxasset://sounds/swordslash.wav",
+	Bonk = "rbxasset://sounds/hit.wav",
 } :: { [string]: number | string }
 
 -- Content URI for a sound name, or nil when the id is 0 or unknown.

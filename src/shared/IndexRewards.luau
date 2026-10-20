@@ -39,7 +39,7 @@ local LAST_MULT = 20
 local DEFAULT_SKIN = "Wooden"
 
 local skins: { Skin } = {
-	{ Id = "Wooden", Name = "Wooden Bat", Primary = hx("#A0703C"), Secondary = hx("#6B4423"), Material = "Wood" },
+	{ Id = "Wooden", Name = "Wooden Bat", Primary = hx("#B07A45"), Secondary = hx("#6B4423"), Material = "Wood" },
 	{ Id = "Leafy", Name = "Leafy Bat", Primary = hx("#5BD15B"), Secondary = hx("#3E8E41"), Material = "Grass", Effect = "Leaves" },
 	{ Id = "Mushroom", Name = "Mushroom Bat", Primary = hx("#FF4D4D"), Secondary = hx("#FFF3E0"), Material = "SmoothPlastic", Effect = "Spores" },
 	{ Id = "Cactus", Name = "Cactus Bat", Primary = hx("#3FA34D"), Secondary = hx("#E8B86D"), Material = "Grass", Effect = "Spikes" },

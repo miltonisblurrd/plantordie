@@ -17,6 +17,7 @@ local list: { RemoteDef } = {
 	{ Name = "Chase", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "CombatFx", Kind = "Event", Rate = 0, Burst = 0 },
 	{ Name = "SpeedGain", Kind = "Event", Rate = 0, Burst = 0 },
+	{ Name = "BatHit", Kind = "Event", Rate = 0, Burst = 0 },
 	-- client -> server
 	{ Name = "RequestState", Kind = "Event", Rate = 1, Burst = 3 },
 	{ Name = "PlantSeed", Kind = "Event", Rate = 5, Burst = 8 },
@@ -45,6 +46,8 @@ local list: { RemoteDef } = {
 	{ Name = "UpgradeTreadmill", Kind = "Event", Rate = 2, Burst = 3 },
 	{ Name = "DropSeed", Kind = "Event", Rate = 1, Burst = 2 },
 	{ Name = "ClaimIndex", Kind = "Event", Rate = 1, Burst = 3 },
+	{ Name = "SwingBat", Kind = "Event", Rate = 2, Burst = 3 },
+	{ Name = "EquipBatSkin", Kind = "Event", Rate = 2, Burst = 4 },
 }
 
 local byName: { [string]: RemoteDef } = {}
