@@ -1,15 +1,18 @@
 --!strict
--- One guardian per biome, driven by a single throttled server loop (spec §6, A9/A10).
---   Patrol  -> walk between the biome's patrol points.
---   Detect  -> nearest player in the biome within DetectRange (2.5x inside a danger zone),
---              never inside the safe zone. That player alone is warned and targeted.
---   Chase   -> PathfindingService path to the target (led by Predict seconds of velocity),
---              recomputed every RecomputeSeconds off-thread; direct move while no path.
---   Lose    -> target outside the leash, inside the safe zone, out of the biome, gone, or the
---              guardian made no headway for StuckSeconds. Then a short cooldown, then patrol.
---   Catch   -> teleport the player home and clear ONLY their unbanked expedition bag.
--- Guardians in biomes with no players skip their update entirely (sleep).
--- A seasonal event may add one extra guardian over its own zone while the event is active.
+-- One guardian per biome, driven by a single throttled server loop (spec §6).
+--   Patrol  -> walk the biome's patrol points at PatrolFactor x chase speed. Ignores everyone.
+--   Chase   -> started only by picking up a seed from this guardian's biome; targets that carrier
+--              alone. PathfindingService path to the target (led by Predict seconds of velocity),
+--              recomputed every RecomputeSeconds off-thread; direct move while no path. May leave
+--              the biome. Ends when the carrier banks, drops, reaches the hub safe area, leaves,
+--              or after MaxChaseSeconds.
+--   Return  -> walk back into the biome, then patrol.
+--   Catch   -> knockback + stun, the seed drops where the carrier stood, no catches for
+--              CooldownSeconds. A new chase needs a new pickup.
+-- Chase speed = Speed.guardianSpeedFor(biome RecommendedSpeed). Day/night has no effect.
+-- Patrolling guardians in biomes with no players skip their update (sleep); chasing or
+-- returning ones never sleep. A seasonal event may add one guardian over its own zone, which
+-- chases carriers of seeds whose origin is that event id.
 
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
@@ -19,25 +22,24 @@ local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local GuardianDefs = require(ReplicatedStorage.Shared.Guardians)
 local Sounds = require(ReplicatedStorage.Shared.Sounds)
+local Speed = require(ReplicatedStorage.Shared.Speed)
 local EventDefs = require(ReplicatedStorage.Shared.Events)
 local Biomes = require(script.Parent.Biomes)
+local Carry = require(script.Parent.Carry)
 local Data = require(script.Parent.Data)
-local Expedition = require(script.Parent.Expedition)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
+local Treadmill = require(script.Parent.Treadmill)
 local GuardianRig = require(script.Parent.World.Builders.GuardianRig)
 
 local G = Config.Guardian
 
-type State = "Patrol" | "Chase" | "Cooldown"
+type State = "Patrol" | "Chase" | "Return"
 type Guardian = {
 	def: GuardianDefs.Guardian,
-	zone: string,
-	center: Vector3,
+	zone: string, -- biome id or event id; matches Carry item origin
 	patrolPts: { Vector3 },
-	danger: { { center: Vector3, radius: number } },
 	inRegion: (Vector3) -> boolean,
-	inSafe: (Vector3) -> boolean,
 	clamp: (Vector3) -> Vector3,
 	model: Model,
 	path: Path,
@@ -45,19 +47,20 @@ type Guardian = {
 	facing: Vector3,
 	state: State,
 	patrolIdx: number,
+	chaseSpeed: number,
+	patrolSpeed: number,
 	target: Player?,
+	chaseStartedAt: number,
+	noCatchUntil: number,
 	waypoints: { Vector3 },
 	wpIdx: number,
 	lastCompute: number,
 	computing: boolean,
 	stuckFrom: Vector3,
 	stuckAt: number,
-	cooldownUntil: number,
 	sleeping: boolean,
 	alert: Sound,
 }
-
-type Visitor = { player: Player, pos: Vector3, root: BasePart }
 
 local GuardianAI = {}
 
@@ -78,7 +81,15 @@ local function place(g: Guardian)
 	g.model:PivotTo(CFrame.lookAt(g.pos, g.pos + g.facing))
 end
 
--- Keeps the guardian inside its biome walls even on a direct (non-path) move.
+local function allGuardians(): { Guardian }
+	local active = table.clone(guardians)
+	if eventGuardian then
+		table.insert(active, eventGuardian)
+	end
+	return active
+end
+
+-- Keeps a patrolling guardian inside its biome walls. Chase and return moves skip it.
 local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
 	local lp = info.cf:PointToObjectSpace(pos)
 	local half = Config.Biome.Size / 2 - 4
@@ -87,69 +98,68 @@ local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
 	return Vector3.new(world.X, groundY(), world.Z)
 end
 
+local function inHubSafe(pos: Vector3): boolean
+	return flat(pos - Biomes.HubSpawn.Position).Magnitude <= Config.Bank.HubRadius
+end
+
 -- Moves toward `goal` at `speed`; returns true once within 1.5 studs.
-local function step(g: Guardian, goal: Vector3, speed: number, dt: number): boolean
+local function step(g: Guardian, goal: Vector3, speed: number, dt: number, free: boolean): boolean
 	local delta = flat(goal - g.pos)
 	local dist = delta.Magnitude
 	if dist < 1.5 then
 		return true
 	end
 	local dir = delta / dist
-	g.pos = g.clamp(g.pos + dir * math.min(dist, speed * dt))
+	local nextPos = g.pos + dir * math.min(dist, speed * dt)
+	g.pos = if free then Vector3.new(nextPos.X, groundY(), nextPos.Z) else g.clamp(nextPos)
 	g.facing = dir
 	place(g)
 	return false
 end
 
-local function inDanger(g: Guardian, pos: Vector3): boolean
-	for _, zone in g.danger do
-		if flat(pos - zone.center).Magnitude <= zone.radius then
-			return true
-		end
-	end
-	return false
-end
-
-local function setDanger(player: Player, on: boolean, g: Guardian?)
-	if player.Parent then
-		Net.fire("Danger", player, on, if g then g.def.Name else nil)
-	end
-end
-
-local function lose(g: Guardian, now: number)
+local function endChase(g: Guardian, reason: string, knockback: Vector3?)
 	local target = g.target
-	if target then
-		setDanger(target, false)
-	end
 	g.target = nil
 	g.waypoints = {}
-	g.state = "Cooldown"
-	g.cooldownUntil = now + G.CooldownSeconds
+	if g.state == "Chase" then
+		g.state = "Return"
+	end
+	if target and target.Parent then
+		Net.fire("Chase", target, "end", g.def.Name, reason, knockback)
+	end
 end
 
-local function startChase(g: Guardian, v: Visitor, now: number)
+local function startChase(g: Guardian, player: Player, now: number): boolean
+	if g.state == "Chase" and g.target ~= player then
+		return false
+	end
 	g.state = "Chase"
-	g.target = v.player
+	g.target = player
+	g.chaseStartedAt = now
 	g.waypoints = {}
 	g.wpIdx = 1
 	g.lastCompute = -math.huge
 	g.stuckFrom = g.pos
 	g.stuckAt = now
+	g.sleeping = false
 	g.alert:Play()
-	setDanger(v.player, true, g)
+	Net.fire("Chase", player, "start", g.def.Name)
+	return true
 end
 
-local function catch(g: Guardian, player: Player, now: number)
-	local lost = Expedition.lose(player)
-	local character = player.Character
-	if character then
-		local home = Plots.spawnCFrame(player) or Biomes.HubSpawn
-		character:PivotTo(home + Vector3.new(0, 3, 0))
+local function catch(g: Guardian, player: Player, root: BasePart, now: number)
+	local away = flat(root.Position - g.pos)
+	local dir = if away.Magnitude > 0.01 then away.Unit else g.facing
+	local knock = dir * G.KnockbackHorizontal + Vector3.new(0, G.KnockbackUp, 0)
+	g.noCatchUntil = now + G.CooldownSeconds
+	local item = Carry.carried(player)
+	endChase(g, "catch", knock)
+	root.AssemblyLinearVelocity = knock
+	Treadmill.stun(player, G.StunSeconds)
+	Carry.drop(player, root.Position, "catch")
+	if item then
+		Net.notify(player, `{g.def.Name} caught you! You dropped your seed. Grab it before the timer runs out!`, "error")
 	end
-	lose(g, now)
-	Net.notify(player, if lost > 0
-		then `{g.def.Name} caught you! You dropped {lost} unbanked seed{if lost == 1 then "" else "s"}.`
-		else `{g.def.Name} caught you! Your bag was empty, so nothing was lost.`, "error")
 end
 
 local function computePath(g: Guardian, goal: Vector3, target: Player)
@@ -181,100 +191,98 @@ local function chase(g: Guardian, dt: number, now: number)
 	local root = target and Biomes.rootOf(target)
 	local humanoid = root and root.Parent and root.Parent:FindFirstChildOfClass("Humanoid")
 	if not target or not root or not target.Parent or (humanoid and humanoid.Health <= 0) then
-		lose(g, now)
+		endChase(g, "lost")
+		return
+	end
+	if not Carry.isCarrying(target) then
+		endChase(g, "drop")
+		return
+	end
+	if now - g.chaseStartedAt >= G.MaxChaseSeconds then
+		endChase(g, "timeout")
 		return
 	end
 	local tpos = root.Position
-	if not g.inRegion(tpos) or g.inSafe(tpos)
-		or flat(tpos - g.center).Magnitude > g.def.LeashRange then
-		lose(g, now)
+	if inHubSafe(tpos) then
+		endChase(g, "safe")
 		return
 	end
-	if flat(tpos - g.pos).Magnitude <= g.def.CatchRange then
-		catch(g, target, now)
+	local plot = Plots.plotAt(tpos)
+	if plot and plot == Plots.plotOf(target) then
+		endChase(g, "bank")
+		return
+	end
+	if now >= g.noCatchUntil and flat(tpos - g.pos).Magnitude <= g.def.CatchRange then
+		catch(g, target, root, now)
 		return
 	end
 
-	local goal = g.clamp(tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict)
+	local lead = tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict
+	local goal = Vector3.new(lead.X, groundY(), lead.Z)
 	if not g.computing and now - g.lastCompute >= g.def.RecomputeSeconds then
 		g.lastCompute = now
 		task.spawn(computePath, g, goal, target)
 	end
 	local wp = g.waypoints[g.wpIdx]
 	if wp then
-		if step(g, wp, g.def.ChaseSpeed, dt) then
+		if step(g, wp, g.chaseSpeed, dt, true) then
 			g.wpIdx += 1
 		end
 	else
-		step(g, goal, g.def.ChaseSpeed, dt)
+		step(g, goal, g.chaseSpeed, dt, true)
 	end
 
+	-- A path that makes no headway is dropped for a direct move; the chase itself goes on.
 	if (g.pos - g.stuckFrom).Magnitude >= G.StuckMinProgress then
 		g.stuckFrom = g.pos
 		g.stuckAt = now
 	elseif now - g.stuckAt > G.StuckSeconds then
-		lose(g, now)
+		g.waypoints = {}
+		g.stuckFrom = g.pos
+		g.stuckAt = now
 	end
 end
 
 local function patrol(g: Guardian, dt: number)
 	local pts = g.patrolPts
-	if step(g, pts[g.patrolIdx], g.def.WalkSpeed, dt) then
+	if step(g, pts[g.patrolIdx], g.patrolSpeed, dt, false) then
 		g.patrolIdx = g.patrolIdx % #pts + 1
 	end
 end
 
-local function detect(g: Guardian, visitors: { Visitor }, now: number)
-	local best: Visitor? = nil
-	local bestD = math.huge
-	for _, v in visitors do
-		if not g.inSafe(v.pos) then
-			local d = flat(v.pos - g.pos).Magnitude
-			local range = if inDanger(g, v.pos) then g.def.DetectRange * 2.5 else g.def.DetectRange
-			if d <= range and d < bestD then
-				best, bestD = v, d
-			end
-		end
-	end
-	if best then
-		startChase(g, best, now)
+local function returnHome(g: Guardian, dt: number)
+	if step(g, g.patrolPts[g.patrolIdx], g.patrolSpeed, dt, true) then
+		g.state = "Patrol"
 	end
 end
 
 local function tick(dt: number)
 	local now = os.clock()
-	local all: { Visitor } = {}
+	local positions: { Vector3 } = {}
 	for _, player in Players:GetPlayers() do
 		local root = Biomes.rootOf(player)
 		if root and Data.isLoaded(player) then
-			table.insert(all, { player = player, pos = root.Position, root = root })
+			table.insert(positions, root.Position)
 		end
 	end
-	local active = table.clone(guardians)
-	if eventGuardian then
-		table.insert(active, eventGuardian)
-	end
-	for _, g in active do
-		local visitors: { Visitor }? = nil
-		for _, v in all do
-			if g.inRegion(v.pos) then
-				visitors = visitors or {}
-				table.insert(visitors :: { Visitor }, v)
-			end
-		end
+	for _, g in allGuardians() do
 		if g.state == "Chase" then
 			g.sleeping = false
 			chase(g, dt, now)
-		elseif not visitors then
-			g.sleeping = true
-		else
+		elseif g.state == "Return" then
 			g.sleeping = false
-			patrol(g, dt)
-			if g.state == "Cooldown" and now >= g.cooldownUntil then
-				g.state = "Patrol"
+			returnHome(g, dt)
+		else
+			local seen = false
+			for _, pos in positions do
+				if g.inRegion(pos) then
+					seen = true
+					break
+				end
 			end
-			if g.state == "Patrol" then
-				detect(g, visitors, now)
+			g.sleeping = not seen
+			if seen then
+				patrol(g, dt)
 			end
 		end
 	end
@@ -290,9 +298,14 @@ function GuardianAI.awakeCount(): number
 	return n
 end
 
+local function speedFor(def: GuardianDefs.Guardian): number
+	local biome = BiomeData.ById[def.Biome]
+	local recommended = def.RecommendedSpeed or (if biome then biome.RecommendedSpeed else 0)
+	return Speed.guardianSpeedFor(recommended)
+end
+
 local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
-	zone: string, center: Vector3, patrolPts: { Vector3 }, danger: { { center: Vector3, radius: number } },
-	inRegion: (Vector3) -> boolean, inSafe: (Vector3) -> boolean, clamp: (Vector3) -> Vector3,
+	zone: string, patrolPts: { Vector3 }, inRegion: (Vector3) -> boolean, clamp: (Vector3) -> Vector3,
 }): Guardian
 	local start = fields.patrolPts[1]
 	local pos = Vector3.new(start.X, groundY(), start.Z)
@@ -303,13 +316,15 @@ local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
 	alert.Volume = 1
 	alert.RollOffMaxDistance = 120
 	alert.Parent = model.PrimaryPart
+	local chaseSpeed = speedFor(def)
 	local g: Guardian = {
-		def = def, zone = fields.zone, center = fields.center, patrolPts = fields.patrolPts, danger = fields.danger,
-		inRegion = fields.inRegion, inSafe = fields.inSafe, clamp = fields.clamp, model = model,
+		def = def, zone = fields.zone, patrolPts = fields.patrolPts,
+		inRegion = fields.inRegion, clamp = fields.clamp, model = model,
 		path = PathfindingService:CreatePath({ AgentRadius = 2 * def.Scale, AgentHeight = 6 * def.Scale, AgentCanJump = false }),
 		pos = pos, facing = Vector3.new(0, 0, -1), state = "Patrol", patrolIdx = 2,
-		target = nil, waypoints = {}, wpIdx = 1, lastCompute = 0, computing = false,
-		stuckFrom = pos, stuckAt = 0, cooldownUntil = 0, sleeping = true, alert = alert,
+		chaseSpeed = chaseSpeed, patrolSpeed = chaseSpeed * G.PatrolFactor,
+		target = nil, chaseStartedAt = 0, noCatchUntil = 0, waypoints = {}, wpIdx = 1, lastCompute = 0,
+		computing = false, stuckFrom = pos, stuckAt = 0, sleeping = true, alert = alert,
 	}
 	place(g)
 	return g
@@ -338,7 +353,7 @@ function GuardianAI.setEventGuardian(eventId: string?)
 	local old = eventGuardian
 	if old then
 		if old.target then
-			lose(old, os.clock())
+			endChase(old, "lost")
 		end
 		old.model:Destroy()
 		eventGuardian = nil
@@ -355,14 +370,10 @@ function GuardianAI.setEventGuardian(eventId: string?)
 		local a = i * math.pi / 2
 		table.insert(pts, c + Vector3.new(math.cos(a) * inner, 0, math.sin(a) * inner))
 	end
-	local hubSafe = Config.Bank.HubRadius
 	eventGuardian = spawn(def, folderOf(nil), {
-		zone = eventId, center = c, patrolPts = pts, danger = {},
+		zone = eventId, patrolPts = pts,
 		inRegion = function(pos)
 			return flat(pos - c).Magnitude <= radius
-		end,
-		inSafe = function(pos)
-			return flat(pos).Magnitude <= hubSafe
 		end,
 		clamp = function(pos)
 			local d = flat(pos - c)
@@ -379,6 +390,15 @@ function GuardianAI.eventGuardianCount(): number
 	return if eventGuardian then 1 else 0
 end
 
+local function guardianFor(origin: string): Guardian?
+	for _, g in allGuardians() do
+		if g.zone == origin then
+			return g
+		end
+	end
+	return nil
+end
+
 function GuardianAI.start(worldFolder: Instance)
 	local folder = folderOf(worldFolder)
 	for _, biome in BiomeData.List do
@@ -387,12 +407,9 @@ function GuardianAI.start(worldFolder: Instance)
 		if def and info then
 			local id = biome.Id
 			table.insert(guardians, spawn(def, folder, {
-				zone = id, center = info.cf.Position, patrolPts = info.skeleton.patrol, danger = info.skeleton.danger,
+				zone = id, patrolPts = info.skeleton.patrol,
 				inRegion = function(pos)
 					return Biomes.inRegion(id, pos)
-				end,
-				inSafe = function(pos)
-					return Biomes.inSafeZone(id, pos)
 				end,
 				clamp = function(pos)
 					return clampToBiome(info, pos)
@@ -401,14 +418,23 @@ function GuardianAI.start(worldFolder: Instance)
 		end
 	end
 
-	Players.PlayerRemoving:Connect(function(player)
-		local active = table.clone(guardians)
-		if eventGuardian then
-			table.insert(active, eventGuardian)
+	Carry.onPickup(function(player, item)
+		local g = guardianFor(item.origin)
+		if g then
+			startChase(g, player, os.clock())
 		end
-		for _, g in active do
+	end)
+	Carry.onRelease(function(player, _item, reason)
+		for _, g in allGuardians() do
+			if g.target == player and g.state == "Chase" then
+				endChase(g, reason)
+			end
+		end
+	end)
+	Players.PlayerRemoving:Connect(function(player)
+		for _, g in allGuardians() do
 			if g.target == player then
-				lose(g, os.clock())
+				endChase(g, "lost")
 			end
 		end
 	end)
