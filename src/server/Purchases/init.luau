@@ -31,7 +31,10 @@ local Plots = require(script.Parent.Plots)
 
 local Purchases = {}
 
-local CREDITABLE: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true, TreadmillLevel = true }
+local CREDITABLE: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true }
+-- TreadmillLevel is never banked any more (Core.refusal turns it away at max), but credits saved
+-- before the level cap rose can still be spent.
+local USABLE_CREDIT: { [string]: boolean } = { InstantGrow = true, NeonSkip = true, MegaSkip = true, TreadmillLevel = true }
 local SKIP_MACHINE: { [string]: string } = { NeonSkip = "Neon", MegaSkip = "Mega" }
 
 -- Applies a product's effect to the profile. Returns a message, or nil if there was nothing to
@@ -123,6 +126,12 @@ local function processReceipt(info: { [string]: any }): Enum.ProductPurchaseDeci
 	if not product or not player or not session then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
+	local refused = Core.refusal(session.data, product.Key)
+	if refused and not session.data.receiptLedger.seen[tostring(info.PurchaseId)] then
+		warn(`[Purchases] {product.Key} {info.PurchaseId} for {player.Name}: refused ({refused}); NotProcessedYet, nothing granted`)
+		Net.notify(player, refused, "warn")
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
 	local result = run(player, session, tostring(info.PurchaseId), product.Key)
 	return if result == "Granted" then Enum.ProductPurchaseDecision.PurchaseGranted else Enum.ProductPurchaseDecision.NotProcessedYet
 end
@@ -144,7 +153,7 @@ end
 
 local function useCredit(player: Player, key: string, arg: string?)
 	local session = Data.get(player)
-	if not session or not CREDITABLE[key] or (session.data.credits[key] or 0) < 1 then
+	if not session or not USABLE_CREDIT[key] or (session.data.credits[key] or 0) < 1 then
 		return
 	end
 	local target = arg

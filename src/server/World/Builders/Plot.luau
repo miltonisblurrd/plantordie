@@ -447,11 +447,18 @@ function PlotBuilder.setTreadmill(refs: PlotRefs, level: number)
 	local cost = Treadmill.nextCost(level)
 	refs.treadmillLevelLabel.Text = if cost then `Lv. {level} > Lv. {level + 1}` else `Lv. {level}`
 	refs.treadmillMoneyLabel.Text = if cost then `${Format.short(cost)}` else "MAX"
-	refs.treadmillRobuxLabel.Text = if cost then `R$ {Products.ByKey.TreadmillLevel.PriceRobux}` else "MAX"
+	refs.treadmillRobuxLabel.Text = if cost then `R$ {Products.ByKey.TreadmillLevel.PriceRobux}` else ""
+	local robuxButton = refs.treadmillRobuxLabel.Parent
+	if robuxButton and robuxButton:IsA("Frame") then
+		robuxButton.Visible = cost ~= nil
+	end
 	for _, name in { "TreadmillMoneyPrompt", "TreadmillRobuxPrompt" } do
 		local prompt = refs.treadmillSign:FindFirstChild(name)
 		if prompt and prompt:IsA("ProximityPrompt") then
 			prompt.ObjectText = if cost then `Lv. {level + 1}` else "MAX"
+			if name == "TreadmillRobuxPrompt" then
+				prompt.Enabled = cost ~= nil
+			end
 		end
 	end
 end

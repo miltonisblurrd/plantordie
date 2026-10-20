@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
+local Treadmill = require(ReplicatedStorage.Shared.Treadmill)
 
 export type Pending = { key: string, arg: string? }
 export type Ledger = { order: { string }, seen: { [string]: boolean }, pending: { [string]: Pending } }
@@ -99,6 +100,15 @@ function Core.instantGrow(p: GrowProfile, uid: string?, now: number): string?
 end
 
 -- Applies grants left pending by a crash between save and grant. Returns how many.
+-- Products that would do nothing for this profile and must not be granted or banked as a
+-- credit. Returns the player-facing reason, or nil when the purchase may go ahead.
+function Core.refusal(p: { treadmillLevel: number }, key: string): string?
+	if key == "TreadmillLevel" and p.treadmillLevel >= Treadmill.MaxLevel then
+		return "Your treadmill is already at max level."
+	end
+	return nil
+end
+
 function Core.recover(ledger: Ledger, grant: (key: string, arg: string?) -> ()): number
 	local n = 0
 	for id, pending in ledger.pending do

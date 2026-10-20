@@ -1,7 +1,8 @@
 --!strict
 -- Treadmill presentation: "+96K 👟" popups above your belt on SpeedGain, and the upgrade sign's
--- prompts (money confirm -> UpgradeTreadmill; Robux -> Purchases). The server re-checks
--- ownership, level and price; non-owners get the server's notice.
+-- prompts (money confirm -> UpgradeTreadmill; Robux -> a saved credit, else Purchases). At max
+-- the server hides the R$ button and disables its prompt; this refuses too in case the sign lags.
+-- The server re-checks ownership, level and price; non-owners get the server's notice.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -137,6 +138,8 @@ function Treadmill.start()
 			promptMoney()
 		elseif State.snapshot and TreadmillData.nextCost(State.snapshot.treadmillLevel) == nil then
 			Notifications.show("Your treadmill is already at max level.", "warn")
+		elseif State.snapshot and (State.snapshot.credits.TreadmillLevel or 0) > 0 then
+			State.remote("UseCredit"):FireServer("TreadmillLevel")
 		else
 			Purchases.offer("TreadmillLevel")
 		end
