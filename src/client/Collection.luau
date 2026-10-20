@@ -2,7 +2,8 @@
 -- Collection index: every species grouped by biome (event species last). Each biome section shows
 -- progress, its reward chips and a Claim button; discovered species show their head colour, name
 -- and the variants found, locked ones a dark silhouette and "???". Data is the server's permanent
--- `collection`; completion and claiming are re-checked on the server.
+-- `collection`; completion and claiming are re-checked on the server. A Bats section on top lists
+-- every bat skin: owned ones can be equipped, locked ones name the biome whose Index awards them.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -142,6 +143,66 @@ local function header(l: ScrollingFrame, sec: Section, order: number, snap: Stat
 	return order
 end
 
+local skinBiome: { [string]: BiomeData.Biome } = {}
+for _, b in BiomeData.List do
+	skinBiome[IndexRewards.Rewards[b.Id].Skin] = b
+end
+
+local function bats(l: ScrollingFrame, order: number, snap: State.Snapshot): number
+	order += 1
+	local h = Ui.label("Section", "🦇 Bats", true, l)
+	h.LayoutOrder = order
+	h.Size = UDim2.new(1, -8, 0, 28)
+	h.TextXAlignment = Enum.TextXAlignment.Left
+	textStroke(h)
+	for _, skin in IndexRewards.Skins do
+		local owned = snap.batSkins.owned[skin.Id] == true
+		local equipped = snap.batSkins.equipped == skin.Id
+		order += 1
+		local row = Instance.new("Frame")
+		row.Name = "Bat_" .. skin.Id
+		row.LayoutOrder = order
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, -8, 0, 34)
+		row.Parent = l
+		local swatch = Instance.new("Frame")
+		swatch.Name = "Swatch"
+		swatch.Size = UDim2.fromOffset(26, 26)
+		swatch.Position = UDim2.fromOffset(0, 4)
+		swatch.BorderSizePixel = 0
+		swatch.BackgroundColor3 = if owned then skin.Primary else DARK
+		swatch.Parent = row
+		Ui.corner(swatch, 6)
+		local ring = Instance.new("UIStroke")
+		ring.Thickness = 3
+		ring.Color = skin.Secondary
+		ring.Transparency = if owned then 0 else 0.7
+		ring.Parent = swatch
+		local biome = skinBiome[skin.Id]
+		local text = if owned then skin.Name elseif biome then `{skin.Name} · {biome.Emoji} {biome.Name} Index` else skin.Name
+		local name = Ui.label("Name", text, false, row)
+		name.Size = UDim2.new(1, -150, 1, 0)
+		name.Position = UDim2.fromOffset(34, 0)
+		name.TextXAlignment = Enum.TextXAlignment.Left
+		name.TextColor3 = if owned then Color3.new(1, 1, 1) else Color3.fromRGB(130, 130, 136)
+		local btn = Ui.button("Equip", if equipped then "Equipped" elseif owned then "Equip" else "Locked", row)
+		btn.Size = UDim2.fromOffset(104, 30)
+		btn.Position = UDim2.new(1, -104, 0, 2)
+		local canEquip = owned and not equipped
+		btn.Active = canEquip
+		btn.AutoButtonColor = canEquip
+		btn.BackgroundColor3 = if canEquip then Ui.Primary else GREY
+		btn.BackgroundTransparency = if owned then 0 else 0.5
+		if canEquip then
+			local id = skin.Id
+			btn.Activated:Connect(function()
+				State.remote("EquipBatSkin"):FireServer(id)
+			end)
+		end
+	end
+	return order
+end
+
 local function rebuild()
 	local l = list
 	local snap = State.snapshot
@@ -153,7 +214,8 @@ local function rebuild()
 			c:Destroy()
 		end
 	end
-	local found, total, order = 0, 0, 0
+	local found, total = 0, 0
+	local order = bats(l, 0, snap)
 	for _, sec in sections() do
 		order = header(l, sec, order, snap)
 		for _, def in sec.plants do
@@ -220,7 +282,11 @@ local function signature(s: State.Snapshot): string
 	for k in s.indexClaimed do
 		table.insert(keys, "!" .. k)
 	end
+	for k in s.batSkins.owned do
+		table.insert(keys, "#" .. k)
+	end
 	table.sort(keys)
+	table.insert(keys, "=" .. s.batSkins.equipped)
 	return table.concat(keys, ",")
 end
 
