@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
+local BiomeRegions = require(ReplicatedStorage.Shared.BiomeRegions)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Data = require(script.Parent.Data)
@@ -61,34 +62,9 @@ function Biomes.anchor(biomeId: string): CFrame?
 	return info and info.cf
 end
 
-local function inside(info: BiomeInfo, pos: Vector3): boolean
-	local lp = info.cf:PointToObjectSpace(pos)
-	local half = B.Size / 2 + 1
-	return math.abs(lp.X) <= half and math.abs(lp.Z) <= half and lp.Y > -20 and lp.Y < 120
-end
-
-function Biomes.regionOf(pos: Vector3): string?
-	for id, info in infos do
-		if inside(info, pos) then
-			return id
-		end
-	end
-	return nil
-end
-
-function Biomes.inRegion(biomeId: string, pos: Vector3): boolean
-	local info = infos[biomeId]
-	return info ~= nil and inside(info, pos)
-end
-
-function Biomes.inSafeZone(biomeId: string, pos: Vector3): boolean
-	local info = infos[biomeId]
-	if not info then
-		return false
-	end
-	local d = Vector3.new(pos.X - info.skeleton.safeCenter.X, 0, pos.Z - info.skeleton.safeCenter.Z)
-	return d.Magnitude <= info.skeleton.safeRadius
-end
+Biomes.regionOf = BiomeRegions.regionOf
+Biomes.inRegion = BiomeRegions.inRegion
+Biomes.inSafeZone = BiomeRegions.inSafeZone
 
 function Biomes.rootOf(player: Player): BasePart?
 	local character = player.Character

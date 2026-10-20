@@ -6,6 +6,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local BiomeRegions = require(ReplicatedStorage.Shared.BiomeRegions)
 
 local W = Config.World
 local B = Config.Biome
@@ -28,20 +29,10 @@ function Layout.plotAngle(_index: number): number
 end
 
 -- Front edge of the plot row (world +Z).
-function Layout.plotFrontZ(): number
-	return P.Depth / 2
-end
-
-function Layout.biomeCenterZ(biomeIndex: number): number
-	local step = B.Size + B.Gap
-	return Layout.plotFrontZ() + B.FrontGap + B.Size / 2 + (biomeIndex - 1) * step
-end
-
+Layout.plotFrontZ = BiomeRegions.plotFrontZ
+Layout.biomeCenterZ = BiomeRegions.centerZ
 -- Biome centre. -Z faces the plots.
-function Layout.biomeCFrame(biomeIndex: number): CFrame
-	local pos = Vector3.new(0, W.GroundY, Layout.biomeCenterZ(biomeIndex))
-	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1))
-end
+Layout.biomeCFrame = BiomeRegions.cframe
 
 function Layout.biomeAngle(_biomeIndex: number): number
 	return 90
