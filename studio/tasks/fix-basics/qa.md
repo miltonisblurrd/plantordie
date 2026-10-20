@@ -18,3 +18,5 @@ Preview: `PlantOrDie-fix-basics.rbxlx` (rojo build of that branch, at the repo r
 
 ## To unblock
 Owner or Chief opens `PlantOrDie-fix-basics.rbxlx` in Studio, presses Play, and records A1, A3, A4, A6, A7 (screenshot or short recording each).
+
+> Note (task 3 QA): previews for tasks 1 and 2 do not boot because main is missing the BuyPortal remote. Fixed on the task 3 branch; playtest `PlantOrDie-shops.rbxlx` instead.
