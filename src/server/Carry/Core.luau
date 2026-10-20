@@ -16,6 +16,8 @@ export type Item = {
 	carrier: any?,
 	pos: Vector3?, -- nil while carried
 	expiresAt: number, -- math.huge while carried
+	stealer: any?, -- besides the owner, may pick up a dropped seed until stealUntil
+	stealUntil: number,
 }
 export type State = {
 	items: { [number]: Item },
@@ -23,24 +25,24 @@ export type State = {
 	nextId: number,
 	revealSeconds: number,
 	dropSeconds: number,
-	-- Who may pick a seed up. Owner only for now; a steal path replaces this.
-	canTake: (Item, any) -> boolean,
+	-- Who may pick a seed up at `now`.
+	canTake: (Item, any, number) -> boolean,
 }
 
 local Core = {}
 
-local function ownerOnly(item: Item, who: any): boolean
-	return item.owner == who
+local function ownerOrStealer(item: Item, who: any, now: number): boolean
+	return item.owner == who or (item.stealer ~= nil and item.stealer == who and now < item.stealUntil)
 end
 
 function Core.new(revealSeconds: number, dropSeconds: number): State
-	return { items = {}, byCarrier = {}, nextId = 1, revealSeconds = revealSeconds, dropSeconds = dropSeconds, canTake = ownerOnly }
+	return { items = {}, byCarrier = {}, nextId = 1, revealSeconds = revealSeconds, dropSeconds = dropSeconds, canTake = ownerOrStealer }
 end
 
 function Core.reveal(s: State, owner: any, species: string, rarity: string, origin: string, pos: Vector3, now: number): Item
 	local item: Item = {
 		id = s.nextId, species = species, rarity = rarity, origin = origin, owner = owner,
-		state = "revealed", carrier = nil, pos = pos, expiresAt = now + s.revealSeconds,
+		state = "revealed", carrier = nil, pos = pos, expiresAt = now + s.revealSeconds, stealer = nil, stealUntil = 0,
 	}
 	s.nextId += 1
 	s.items[item.id] = item
@@ -52,7 +54,7 @@ function Core.carried(s: State, who: any): Item?
 	return if id then s.items[id] else nil
 end
 
--- Returns the item, or nil and a reason: "gone" | "taken" | "not yours" | "already carrying".
+-- A stealer who picks the seed up becomes its owner. Returns the item, or nil and a reason: "gone" | "taken" | "not yours" | "already carrying".
 function Core.pickup(s: State, who: any, id: number, now: number): (Item?, string?)
 	local item = s.items[id]
 	if not item or now >= item.expiresAt then
@@ -61,13 +63,16 @@ function Core.pickup(s: State, who: any, id: number, now: number): (Item?, strin
 	if item.state == "carried" then
 		return nil, "taken"
 	end
-	if not s.canTake(item, who) then
+	if not s.canTake(item, who, now) then
 		return nil, "not yours"
 	end
 	if s.byCarrier[who] then
 		return nil, "already carrying"
 	end
 	item.state = "carried"
+	item.owner = who
+	item.stealer = nil
+	item.stealUntil = 0
 	item.carrier = who
 	item.pos = nil
 	item.expiresAt = math.huge
@@ -75,8 +80,8 @@ function Core.pickup(s: State, who: any, id: number, now: number): (Item?, strin
 	return item, nil
 end
 
--- Every drop restarts the full countdown.
-function Core.drop(s: State, who: any, pos: Vector3, now: number): Item?
+-- Every drop restarts the full countdown. `stealer` may also take it for `stealSeconds`.
+function Core.drop(s: State, who: any, pos: Vector3, now: number, stealer: any?, stealSeconds: number?): Item?
 	local item = Core.carried(s, who)
 	if not item then
 		return nil
@@ -86,6 +91,8 @@ function Core.drop(s: State, who: any, pos: Vector3, now: number): Item?
 	item.carrier = nil
 	item.pos = pos
 	item.expiresAt = now + s.dropSeconds
+	item.stealer = if stealer ~= nil and stealer ~= who then stealer else nil
+	item.stealUntil = if item.stealer ~= nil then now + (stealSeconds or 0) else 0
 	return item
 end
 

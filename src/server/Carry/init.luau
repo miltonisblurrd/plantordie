@@ -254,14 +254,15 @@ tryPickup = function(player: Player, id: number)
 	fire(pickupHooks, player, got, "pickup")
 end
 
--- Drops the carried seed at `pos` (snapped to the ground). Returns the dropped item.
-function Carry.drop(player: Player, pos: Vector3?, reason: string): Item?
+-- Drops the carried seed at `pos` (snapped to the ground). A `stealer` may also pick it up for
+-- Config.Bat.StealWindow seconds. Returns the dropped item.
+function Carry.drop(player: Player, pos: Vector3?, reason: string, stealer: Player?): Item?
 	if not Core.carried(state, player) then
 		return nil
 	end
 	local root = rootOf(player)
 	local at = pos or (if root then root.Position else nil) or lastPos[player] or Biomes.HubSpawn.Position
-	local item = Core.drop(state, player, Carry.groundAt(at), os.clock())
+	local item = Core.drop(state, player, Carry.groundAt(at), os.clock(), stealer, Config.Bat.StealWindow)
 	if not item then
 		return nil
 	end
@@ -332,7 +333,7 @@ local function tick()
 				end
 			else
 				for id, item in state.items do
-					if item.pos and state.canTake(item, player) and (item.pos - pos).Magnitude <= C.TouchRange then
+					if item.pos and state.canTake(item, player, now) and (item.pos - pos).Magnitude <= C.TouchRange then
 						tryPickup(player, id)
 						break
 					end
