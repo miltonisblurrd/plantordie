@@ -571,6 +571,88 @@ do
 	print(("hub stalls: %d parts (%d each), clear of %d hub/Halloween parts (machines, spawn, fountain, trees) and all 8 plots"):format(#stallParts, #stallParts // 2, #others))
 end
 
+print("\n-- Biome banner data and shared regions --")
+do
+	local Format = require(Shared.Format)
+	local BiomeRegions = require(Shared.BiomeRegions)
+	local BiomesSrv = require(Server.Biomes)
+	local want = {
+		{ "GreenMeadows", "🌱", 100, "100" }, { "MushroomForest", "🍄", 10_000, "10K" },
+		{ "CactusCanyon", "🌵", 100_000, "100K" }, { "InfernoJungle", "🔥", 1e6, "1M" },
+		{ "FrostbiteGarden", "❄️", 1e7, "10M" }, { "EnchantedGrove", "🌳", 1e8, "100M" },
+		{ "TropicalParadise", "🌴", 1e9, "1B" }, { "CoralKingdom", "🪸", 5e9, "5B" },
+		{ "AutumnWoods", "🍂", 1e10, "10B" }, { "SkyIslands", "☁️", 2.5e10, "25B" },
+		{ "CrystalCaverns", "💎", 5e10, "50B" }, { "ToxicSwamp", "☣️", 1e11, "100B" },
+		{ "AncientWilds", "🏛️", 2.5e11, "250B" }, { "CosmicGarden", "🌌", 5e14, "500T" },
+		{ "ForbiddenBloom", "🌺", 1e15, "1 QA" },
+	}
+	assert(#Biomes.List == 15)
+	local shown = {}
+	for i, w in want do
+		local b = Biomes.List[i]
+		assert(b.Id == w[1] and b.Emoji == w[2] and b.RecommendedSpeed == w[3], "banner data " .. b.Id)
+		assert(Format.speed(b.RecommendedSpeed) == w[4], b.Id .. " speed text " .. Format.speed(b.RecommendedSpeed))
+		table.insert(shown, Format.speed(b.RecommendedSpeed))
+	end
+	assert(Format.money(1e15) == "$1QA" and Format.short(1e15) == "1QA", "money/short formatting unchanged")
+
+	-- Reference: the pre-move Layout + server `inside` math, written out from Config.
+	local B, W = Config.Biome, Config.World
+	local function refCenterZ(i) return Config.Plot.Depth / 2 + B.FrontGap + B.Size / 2 + (i - 1) * (B.Size + B.Gap) end
+	local function refRegion(pos)
+		for _, b in Biomes.List do
+			local lp = pos - Vector3.new(0, W.GroundY, refCenterZ(b.Index))
+			local half = B.Size / 2 + 1
+			if math.abs(lp.X) <= half and math.abs(lp.Z) <= half and lp.Y > -20 and lp.Y < 120 then return b.Id end
+		end
+		return nil
+	end
+	local n, inside, outside = 0, 0, 0
+	local function check(pos, expectNil)
+		local s, r = BiomesSrv.regionOf(pos), BiomeRegions.regionOf(pos)
+		assert(s == r and r == refRegion(pos), ("regionOf mismatch at %.1f,%.1f,%.1f"):format(pos.X, pos.Y, pos.Z))
+		if expectNil then assert(r == nil, ("expected no region at %.1f,%.1f,%.1f"):format(pos.X, pos.Y, pos.Z)) end
+		if r then
+			inside += 1
+			assert(BiomesSrv.inRegion(r, pos) and BiomeRegions.distanceInside(r, pos) >= 0)
+		else
+			outside += 1
+		end
+		n += 1
+	end
+	for _, b in Biomes.List do
+		local cz = refCenterZ(b.Index)
+		assert(Layout.biomeCenterZ(b.Index) == cz and Layout.biomeCFrame(b.Index).Position.Z == cz)
+		for _, dz in { -58, -57.5, -57, -56.5, -56, -30, 0, 30, 56, 56.5, 57, 57.5, 58 } do
+			for _, dx in { -58, -57, -56, 0, 56, 57, 58 } do
+				for _, dy in { -21, -19, 0, 3, 119, 121 } do
+					check(Vector3.new(dx, W.GroundY + dy, cz + dz))
+				end
+			end
+		end
+		local p = Vector3.new(0, W.GroundY + 3, cz)
+		assert(math.abs(BiomeRegions.distanceInside(b.Id, p) - math.min(B.Size / 2 + 1, 3 + 20)) < 1e-6, "Y band is an edge")
+		assert(math.abs(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, 56.5)) - 0.5) < 1e-6, "hysteresis band")
+		assert(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, 58)) < 0)
+		if b.Index > 1 then
+			check(Vector3.new(0, W.GroundY + 3, cz - B.Size / 2 - B.Gap / 2), true) -- trail gap
+		end
+		local sc = BiomeRegions.safeCenter(b.Id)
+		assert(sc and sc.Z == cz - B.Size / 2 + B.SafeRadius + 6 and sc.X == 0)
+		assert(BiomesSrv.inSafeZone(b.Id, sc + Vector3.new(B.SafeRadius - 0.1, 0, 0)))
+		assert(not BiomesSrv.inSafeZone(b.Id, sc + Vector3.new(B.SafeRadius + 0.1, 0, 0)))
+	end
+	check(Vector3.new(0, W.GroundY + 3, -70), true) -- hub spawn
+	check(Vector3.new(0, W.GroundY + 3, Config.Plot.Depth / 2 + 6), true) -- trail to biome 1
+	for i = 1, W.PlotCount do
+		local pc = Layout.plotCFrame(i).Position
+		check(pc + Vector3.new(0, 3, 0), true)
+		check(pc + Vector3.new(Config.Plot.Width / 2 - 1, 3, Config.Plot.Depth / 2 - 1), true)
+	end
+	print(("  15 biomes: emoji + RecommendedSpeed exact; speed text %s"):format(table.concat(shown, ", ")))
+	print(("  regionOf: server == shared == pre-move math at %d points (%d inside, %d outside); hub, plots, trail gaps -> nil"):format(n, inside, outside))
+end
+
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
 local Core = require(Server.Defense.Core)
 local Zombies = require(Shared.Zombies)
