@@ -27,7 +27,10 @@ export type Snapshot = {
 	water: { channel: boolean, sprinkler: boolean, pond: boolean },
 	fusion: { [string]: FusionSlot },
 	credits: { [string]: number },
-	collection: { [string]: boolean }, -- "species|variant"
+	collection: { [string]: boolean }, -- "species|variant", permanent
+	indexClaimed: { [string]: boolean }, -- biome id -> index reward claimed
+	batSkins: { owned: { [string]: boolean }, equipped: string },
+	speedBonus: number,
 	growthBoostEndsAt: number,
 	persistent: boolean,
 	speed: number,

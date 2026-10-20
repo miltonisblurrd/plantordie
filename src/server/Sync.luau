@@ -5,7 +5,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Discovery = require(ReplicatedStorage.Shared.Discovery)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
@@ -142,7 +141,10 @@ function Sync.push(player: Player)
 		water = d.water,
 		fusion = d.fusion,
 		credits = d.credits,
-		collection = Discovery.of(d :: any),
+		collection = d.collection,
+		indexClaimed = d.indexClaimed,
+		batSkins = d.batSkins,
+		speedBonus = d.speedBonus,
 		growthBoostEndsAt = d.growthBoostEndsAt,
 		speed = d.speed,
 		treadmillLevel = d.treadmillLevel,
