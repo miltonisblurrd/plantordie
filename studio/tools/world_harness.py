@@ -687,7 +687,7 @@ do
 	v8.seeds = { Sunpetal = 2 }
 	v8.expedition = { Sunpetal = 3, PeaPopper = 1, Bogus = "x" }
 	local m = assert(Schema.migrate(v8))
-	assert(m.version == 9 and Config.Data.SchemaVersion == 9)
+	assert(m.version == Config.Data.SchemaVersion and Config.Data.SchemaVersion >= 9)
 	assert(m.seeds.Sunpetal == 5 and m.seeds.PeaPopper == 1 and m.seeds.Bogus == nil, "bag banked into seeds")
 	assert(next(m.expedition) == nil, "expedition stays empty")
 	local again = assert(Schema.migrate(m))
@@ -732,6 +732,79 @@ do
 	for _ in s.byCarrier do carriers += 1 end
 	assert(carriers == 0, "no leftover carriers")
 	print("  carry core: owner-only pickup, one seed each, one pickup wins, drop timer resets, transfer atomic, bank removes, expiry permanent")
+end
+
+print("\n-- Index rewards: required sets, rewards, claim, treadmill bonus, v10 migration --")
+do
+	local IR = require(Shared.IndexRewards)
+	local Discovery = require(Shared.Discovery)
+	local TM = require(Shared.Treadmill)
+	local Schema = require(Server.Data.Schema)
+	assert(Config.Data.SchemaVersion == 10)
+	local EXPECT = { "Leafy Bat", "Mushroom Bat", "Cactus Bat", "Lava Bat", "Ice Bat", "Enchanted Bat", "Palm Bat", "Coral Bat",
+		"Autumn Bat", "Cloud Bat", "Crystal Bat", "Toxic Bat", "Ancient Bat", "Galaxy Bat", "Divine Bloom Bat" }
+	local names, prevCash, req = {}, 0, 0
+	for i, b in Biomes.List do
+		local ids = IR.Required[b.Id]
+		assert(ids and #ids > 0, b.Id .. " has a required list")
+		assert(#ids == #(Plants.ByBiome[b.Id] or {}), b.Id .. " requires every species (secrets included)")
+		req += #ids
+		local r = IR.Rewards[b.Id]
+		assert(r.Cash > prevCash and r.Cash >= 5000, b.Id .. " cash increases")
+		prevCash = r.Cash
+		assert(math.abs(r.SpeedBonus - 0.10) < 1e-9)
+		local skin = IR.SkinById[r.Skin]
+		assert(skin and skin.Name == EXPECT[i], b.Id .. " skin " .. tostring(skin and skin.Name))
+		assert(not names[skin.Name], "unique skin " .. skin.Name)
+		names[skin.Name] = true
+	end
+	assert(IR.Rewards.GreenMeadows.Cash == Biomes.List[2].Cost * 2)
+	assert(IR.Rewards.ForbiddenBloom.Cash == Biomes.List[15].Cost * 20)
+	assert(IR.SkinById.Wooden and IR.DefaultSkin == "Wooden")
+
+	local function prof()
+		local p = Schema.default()
+		p.money = 0
+		return p
+	end
+	local p = prof()
+	local ids = IR.Required.GreenMeadows
+	for i = 1, #ids - 1 do Discovery.record(p, ids[i]) end
+	Discovery.record(p, ids[#ids], "Neon")
+	local r, why = IR.claim(p, "GreenMeadows")
+	assert(r == nil and why and p.money == 0 and not p.indexClaimed.GreenMeadows, "incomplete refused (Neon does not count)")
+	assert(IR.claim(p, "Nowhere") == nil, "unknown biome refused")
+	Discovery.record(p, ids[#ids])
+	r = IR.claim(p, "GreenMeadows")
+	assert(r and p.money == r.Cash and p.stats.moneyEarned == r.Cash and math.abs(p.speedBonus - 0.10) < 1e-9, "complete grants")
+	assert(p.batSkins.owned.Leafy and p.batSkins.owned.Wooden and p.indexClaimed.GreenMeadows)
+	local r2 = IR.claim(p, "GreenMeadows")
+	assert(r2 == nil and p.money == r.Cash and math.abs(p.speedBonus - 0.10) < 1e-9, "second claim refused, nothing doubled")
+
+	local base = TM.speedPerSec(5) * TM.multiplierFor("Starter")
+	assert(TM.gain(5, "Starter", 0) == base)
+	assert(math.abs(TM.gain(5, "Starter", 0.3) - base * 1.3) < 1e-9)
+	local trails = require(Shared.Trails).List
+	local trail = trails[#trails]
+	assert(math.abs(TM.gain(5, trail.Id, 0.1) - TM.speedPerSec(5) * trail.Multiplier * 1.1) < 1e-6, "trail x bonus multiply")
+
+	local v9 = { version = 9, money = 77, collection = { ["PeaPopper|Neon"] = true }, seeds = { Sunpetal = 2 },
+		plants = { ["3"] = { id = "3", species = "IceRose", rarity = "Rare", size = "Medium", variant = "Mega" } },
+		planted = { ["1_1"] = { species = "Puffcap", rarity = "Common", size = "Medium", variant = "Normal", plantedAt = 0, uid = "1" } },
+		expedition = {} }
+	local m = assert(Schema.migrate(v9))
+	assert(m.version == 10 and m.money == 77)
+	assert(m.collection["PeaPopper|Neon"] and m.collection["Sunpetal|Normal"] and m.collection["IceRose|Mega"] and m.collection["Puffcap|Normal"], "held discoveries folded")
+	assert(type(m.indexClaimed) == "table" and next(m.indexClaimed) == nil and m.speedBonus == 0)
+	assert(m.batSkins.owned.Wooden and m.batSkins.equipped == "Wooden")
+	local bad = assert(Schema.migrate({ version = 10, batSkins = { owned = { Leafy = true }, equipped = "Galaxy" }, indexClaimed = { GreenMeadows = true } }))
+	assert(bad.batSkins.owned.Leafy and bad.batSkins.owned.Wooden and bad.batSkins.equipped == "Wooden" and bad.indexClaimed.GreenMeadows, "maps kept, unowned equip reset")
+
+	m.plants["3"] = nil
+	m.seeds.Sunpetal = nil
+	assert(m.collection["IceRose|Mega"] and m.collection["Sunpetal|Normal"], "selling/using keeps discoveries")
+	print(("  15 biomes, %d required species; cash $%s -> $%s; 15 unique skins + Wooden; claim refuses incomplete, grants once; gain x(1+bonus); v9 -> v10 folds held, adds fields"):format(
+		req, tostring(IR.Rewards.GreenMeadows.Cash), tostring(IR.Rewards.ForbiddenBloom.Cash)))
 end
 
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
