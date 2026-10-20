@@ -96,14 +96,16 @@ function Core.addZombie(f: Field, id: number, kind: string, lane: number, x: num
 	return z
 end
 
-function Core.setPlant(f: Field, key: string, lane: number, x: number, stats: Combat.PlantStats?)
+-- `wilted` overrides the field's own flag (the garden's stun timer is the authority); nil keeps it.
+function Core.setPlant(f: Field, key: string, lane: number, x: number, stats: Combat.PlantStats?, wilted: boolean?)
 	local hp = if stats then stats.hp else 1
 	local old = f.plants[key]
+	local isWilted = if wilted ~= nil then wilted elseif old then old.wilted else false
 	f.plants[key] = {
 		key = key, lane = lane, x = x, hp = hp, maxHp = hp, stats = stats, nextAttack = 0,
-		wilted = if old then old.wilted else false,
+		wilted = isWilted,
 	}
-	if old and old.wilted then
+	if isWilted then
 		f.plants[key].hp = 0
 	end
 end
@@ -331,6 +333,12 @@ function Core.dawn(f: Field, out: { Event })
 	for _, z in f.zombies do
 		if not z.dead then
 			despawn(z, "dawn", out)
+		end
+	end
+	for _, p in f.plants do
+		if p.wilted then
+			p.wilted = false
+			p.hp = p.maxHp
 		end
 	end
 	f.traps = {}

@@ -127,7 +127,7 @@ local function syncPlant(player: Player, key: string)
 	local stats = Combat.plantStats(rec.species, rec.size, rec.variant)
 	local lane, x = laneAndX(key)
 	local old = st.field.plants[key]
-	Core.setPlant(st.field, key, lane, x, stats)
+	Core.setPlant(st.field, key, lane, x, stats, table.find(Garden.wiltedKeys(player), key) ~= nil)
 	if old and not old.wilted then
 		local p = st.field.plants[key]
 		p.hp = math.min(p.maxHp, old.hp)
@@ -420,6 +420,9 @@ local function endWave(player: Player)
 	clearZombies(st, "dawn")
 	local events: { Core.Event } = {}
 	Core.dawn(st.field, events)
+	for _, key in Garden.wiltedKeys(player) do
+		Garden.clearStun(player, key)
+	end
 	Sync.resetHouseHp(player)
 	local session = Data.get(player)
 	if not w or not session then
