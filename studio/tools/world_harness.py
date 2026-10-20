@@ -368,6 +368,81 @@ end
 print(("Total ~%.0f min (~%.1f h) including %.0f min of growth; excludes refill walks and house purchases"):format(total, total / 60, totalGrow))
 print("Minutes row: " .. table.concat(steps, " | "))
 
+print("\n== Treadmill, speed and saved data ==")
+do
+	local Speed = require(Shared.Speed)
+	local Treadmill = require(Shared.Treadmill)
+	local Format = require(Shared.Format)
+	local Schema = require(Server.Data.Schema)
+	assert(Speed.walkSpeedFor(0) == 16, "walkSpeedFor(0) must be 16")
+	assert(Speed.walkSpeedFor(1e15) <= 40.1 and Speed.walkSpeedFor(1e15) >= 39.9, "walkSpeedFor(1e15) ~40")
+	local prev = -1
+	for e = 0, 20, 0.25 do
+		local w = Speed.walkSpeedFor(10 ^ e)
+		assert(w >= prev, "walkSpeedFor must be monotonic")
+		prev = w
+	end
+	assert(#Treadmill.Levels >= 30 and Treadmill.Levels[1].Cost == 0)
+	for l = 2, #Treadmill.Levels do
+		local a, b = Treadmill.Levels[l - 1], Treadmill.Levels[l]
+		assert(b.Level == l and b.SpeedPerSec > a.SpeedPerSec and b.Cost > a.Cost, "level " .. l .. " must increase")
+	end
+	assert(Treadmill.nextCost(#Treadmill.Levels) == nil and Treadmill.multiplierFor("Nope") == 1)
+	local top = Treadmill.Levels[#Treadmill.Levels]
+	print(("%d levels: Lv2 %s/s for $%s ... Lv%d %s/s for $%s"):format(#Treadmill.Levels, Format.short(Treadmill.Levels[2].SpeedPerSec),
+		Format.short(Treadmill.Levels[2].Cost), top.Level, Format.short(top.SpeedPerSec), Format.short(top.Cost)))
+	print(("walkSpeed: 0 -> %.1f, 1K -> %.1f, 1B -> %.1f, 1e15 -> %.1f"):format(Speed.walkSpeedFor(0), Speed.walkSpeedFor(1e3), Speed.walkSpeedFor(1e9), Speed.walkSpeedFor(1e15)))
+	assert(Format.short(96000) == "96K" and Format.short(1.2e15) == "1.2QA" and Format.money(2e15) == "$2QA")
+
+	-- v6 record: no speed/trails; a partial trails record keeps its owned map and gains Starter.
+	local v6 = Schema.default()
+	v6.version = 6
+	v6.speed, v6.treadmillLevel, v6.trails = nil, nil, nil
+	local m = assert(Schema.migrate(v6))
+	assert(m.version == Config.Data.SchemaVersion and m.speed == 0 and m.treadmillLevel == 1)
+	assert(m.trails.owned.Starter == true and m.trails.equipped == "Starter")
+	assert(m.trails.owned ~= Schema.default().trails.owned)
+	local v7 = Schema.default()
+	v7.trails = { owned = { Neon = true }, equipped = "Neon" }
+	local m7 = assert(Schema.migrate(v7))
+	assert(m7.trails.owned.Neon and m7.trails.owned.Starter and m7.trails.equipped == "Neon")
+	local bad = Schema.default()
+	bad.version = 6
+	bad.trails = "junk"
+	assert(assert(Schema.migrate(bad)).trails.owned.Starter)
+	print("schema v6 -> v7 migration ok")
+
+	-- Treadmill footprint (plot local) must clear the garden, every house tier and the spawn.
+	local scratch = newInstance("Folder", "Scratch")
+	local refs = PlotBuilder.build(99, CFrame.new(0, 0, 0), scratch)
+	local function box(p) return p.CFrame.Position - p.Size / 2, p.CFrame.Position + p.Size / 2 end
+	local function overlap(aMin, aMax, bMin, bMax)
+		return aMin.X < bMax.X and aMax.X > bMin.X and aMin.Z < bMax.Z and aMax.Z > bMin.Z
+	end
+	local P = Config.Plot
+	local gMin = Vector3.new(P.GardenOriginX - 1, 0, -P.Lanes * P.TileSize / 2 - 1)
+	local gMax = Vector3.new(P.GardenOriginX + P.Columns * P.TileSize + 1, 0, P.Lanes * P.TileSize / 2 + 1)
+	local n = 0
+	for _, part in refs.treadmill:GetDescendants() do
+		if part:IsA("BasePart") then
+			n += 1
+			local a, b = box(part)
+			assert(not overlap(a, b, gMin, gMax), part.Name .. " overlaps the garden")
+			for _, h in Houses.List do
+				local hMin = Vector3.new(P.HouseX - h.Size.X / 2, 0, -h.Size.Z / 2)
+				local hMax = Vector3.new(P.HouseX + h.Size.X / 2, 0, h.Size.Z / 2)
+				assert(not overlap(a, b, hMin, hMax), part.Name .. " overlaps house " .. h.Name)
+			end
+			assert(a.X >= -P.Width / 2 and b.X <= P.Width / 2 and a.Z >= -P.Depth / 2 and b.Z <= P.Depth / 2, part.Name .. " leaves the plot")
+			assert(not overlap(a, b, refs.spawn.Position - Vector3.new(3, 0, 3), refs.spawn.Position + Vector3.new(3, 0, 3)), part.Name .. " blocks the spawn")
+		end
+	end
+	assert(refs.belt and refs.treadmillLevelLabel.Text == "Lv. 1 > Lv. 2" and refs.treadmillMoneyLabel.Text == "$230")
+	PlotBuilder.setTreadmill(refs, Treadmill.MaxLevel)
+	assert(refs.treadmillMoneyLabel.Text == "MAX")
+	print(("treadmill + sign: %d parts per plot, clear of garden, houses, spawn"):format(n))
+end
+
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
 local Core = require(Server.Defense.Core)
 local Zombies = require(Shared.Zombies)
