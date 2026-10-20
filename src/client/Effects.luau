@@ -11,7 +11,11 @@ local Effects = {}
 
 local reduced = false
 
+-- Speed trails are throttled by client/TrailFx instead of switched off.
 local function isFx(inst: Instance): boolean
+	if inst:GetAttribute("TrailFx") then
+		return false
+	end
 	return inst:IsA("ParticleEmitter") or inst:IsA("Sparkles") or inst:IsA("Fire") or inst:IsA("Smoke") or inst:IsA("Trail")
 end
 

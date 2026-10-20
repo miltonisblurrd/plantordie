@@ -19,7 +19,8 @@ export type Snapshot = {
 	plotIndex: number,
 	area: string,
 	areaBiome: string, -- biome id, "" outside biomes
-	shovelTier: number,
+	shovelTier: number, -- equipped shovel
+	shovels: { owned: { [string]: boolean }, equipped: number }, -- owned keyed by tostring(tier)
 	bag: { [string]: number }, -- unbanked expedition seeds
 	defense: DefenseInfo?,
 	event: EventInfo?,
