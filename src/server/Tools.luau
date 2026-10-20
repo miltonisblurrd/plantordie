@@ -47,21 +47,35 @@ end
 function Tools.giveShovel(player: Player)
 	local session = Data.get(player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
-	if not session or not backpack then
+	if not session then
 		return
 	end
 	local equipped = false
 	local character = player.Character
-	local oldInBag = backpack:FindFirstChild("Shovel")
-	if oldInBag then
-		oldInBag:Destroy()
+	local gear = player:FindFirstChildOfClass("StarterGear")
+	local function clear(container: Instance?)
+		if not container then
+			return
+		end
+		for _, old in container:GetChildren() do
+			if old:IsA("Tool") and old.Name == "Shovel" then
+				equipped = equipped or container == character
+				old:Destroy()
+			end
+		end
 	end
-	local held = character and character:FindFirstChild("Shovel")
-	if held then
-		equipped = true
-		held:Destroy()
+	clear(backpack)
+	clear(gear)
+	clear(character)
+	local tier = session.data.shovelTier
+	-- StarterGear copies into each new Backpack, so respawns keep a shovel even before this reruns.
+	if gear then
+		buildShovel(tier).Parent = gear
 	end
-	local tool = buildShovel(session.data.shovelTier)
+	if not backpack then
+		return
+	end
+	local tool = buildShovel(tier)
 	tool.Parent = backpack
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if equipped and humanoid then
