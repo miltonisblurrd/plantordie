@@ -30,6 +30,7 @@ local Treadmill = require(script.Parent.Treadmill)
 local ShopStalls = require(script.Parent.ShopStalls)
 local TrailFx = require(script.Parent.TrailFx)
 local BiomeBanner = require(script.Parent.BiomeBanner)
+local Bat = require(script.Parent.Bat)
 
 local barGui = Ui.screen("ActionBar", Players.LocalPlayer:WaitForChild("PlayerGui"), 2)
 
@@ -75,4 +76,5 @@ Treadmill.start()
 ShopStalls.start()
 TrailFx.start()
 BiomeBanner.start()
+Bat.start()
 State.start()
