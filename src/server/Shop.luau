@@ -1,6 +1,7 @@
 --!strict
 -- In-game money purchases: lanes (in order), house tiers (in order, biome-gated), biome
--- unlocks (in order, A8), shovel tiers (in order) and water tiers (in order, P5).
+-- unlocks (in order, A8), water tiers (in order, P5), and shovels and trails from the hub stalls
+-- (any order; buying auto-equips).
 -- The client shows a confirm with the exact benefit and price; the server re-checks everything.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,6 +11,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local Lanes = require(ReplicatedStorage.Shared.Lanes)
+local Trails = require(ReplicatedStorage.Shared.Trails)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
@@ -17,6 +19,7 @@ local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
 local Sync = require(script.Parent.Sync)
 local Tools = require(script.Parent.Tools)
+local TrailFx = require(script.Parent.TrailFx)
 
 local Shop = {}
 
@@ -104,27 +107,112 @@ local function unlockBiome(player: Player, biomeId: string)
 	Net.notify(player, `{biome.Name} unlocked forever! Head through its gate to explore.`)
 end
 
-local function buyShovel(player: Player)
+-- Buying needs the player on or near that stall's circle; equipping works anywhere.
+local function nearStall(player: Player, shopId: string): boolean
+	local root = Biomes.rootOf(player)
+	local at = (Config.Shops :: any)[shopId] :: Vector3
+	if not root then
+		return false
+	end
+	local d = Vector3.new(root.Position.X - at.X, 0, root.Position.Z - at.Z)
+	return d.Magnitude <= Config.Shops.BuyRange
+end
+
+local function shovelDef(tier: number): Upgrades.Shovel?
+	return if tier == math.floor(tier) then Upgrades.Shovels[tier] else nil
+end
+
+local function setShovel(p: any, tier: number)
+	p.shovels.equipped = tier
+	p.shovelTier = tier
+end
+
+local function buyShovel(player: Player, tier: number)
 	local session = Data.get(player)
-	if not session then
+	local def = shovelDef(tier)
+	if not session or not def then
 		return
 	end
 	local d = session.data
-	local nextDef = Upgrades.Shovels[d.shovelTier + 1]
-	if not nextDef then
-		Net.notify(player, "Your shovel is already max tier.", "warn")
+	if d.shovels.owned[tostring(def.Tier)] then
+		Net.notify(player, `You already own the {def.Name}.`, "warn")
 		return
 	end
-	if d.money < nextDef.Cost then
-		Net.notify(player, `Not enough money. {nextDef.Name} costs {Format.money(nextDef.Cost)}.`, "error")
+	if not nearStall(player, "Shovels") then
+		Net.notify(player, "Walk to the Shovel Shop to buy shovels.", "warn")
+		return
+	end
+	if d.money < def.Cost then
+		Net.notify(player, `Not enough money. {def.Name} costs {Format.money(def.Cost)}.`, "error")
 		return
 	end
 	Data.update(player, function(p)
-		p.money -= nextDef.Cost
-		p.shovelTier = nextDef.Tier
+		p.money -= def.Cost
+		p.shovels.owned[tostring(def.Tier)] = true
+		setShovel(p, def.Tier)
 	end)
 	Tools.giveShovel(player)
-	Net.notify(player, `Upgraded to {nextDef.Name}!`)
+	Net.notify(player, `Bought and equipped the {def.Name}!`)
+end
+
+local function equipShovel(player: Player, tier: number)
+	local session = Data.get(player)
+	local def = shovelDef(tier)
+	if not session or not def or not session.data.shovels.owned[tostring(def.Tier)] then
+		return
+	end
+	if session.data.shovels.equipped == def.Tier then
+		return
+	end
+	Data.update(player, function(p)
+		setShovel(p, def.Tier)
+	end)
+	Tools.giveShovel(player)
+	Net.notify(player, `Equipped the {def.Name}.`)
+end
+
+local function buyTrail(player: Player, id: string)
+	local session = Data.get(player)
+	local def = Trails.ById[id]
+	if not session or not def then
+		return
+	end
+	local d = session.data
+	if d.trails.owned[def.Id] then
+		Net.notify(player, `You already own the {def.Name}.`, "warn")
+		return
+	end
+	if not nearStall(player, "Trails") then
+		Net.notify(player, "Walk to the Trails Shop to buy trails.", "warn")
+		return
+	end
+	if d.money < def.Price then
+		Net.notify(player, `Not enough money. {def.Name} costs {Format.money(def.Price)}.`, "error")
+		return
+	end
+	Data.update(player, function(p)
+		p.money -= def.Price
+		p.trails.owned[def.Id] = true
+		p.trails.equipped = def.Id
+	end)
+	TrailFx.apply(player)
+	Net.notify(player, `Bought and equipped the {def.Name}! Treadmill speed x{def.Multiplier}.`)
+end
+
+local function equipTrail(player: Player, id: string)
+	local session = Data.get(player)
+	local def = Trails.ById[id]
+	if not session or not def or not session.data.trails.owned[def.Id] then
+		return
+	end
+	if session.data.trails.equipped == def.Id then
+		return
+	end
+	Data.update(player, function(p)
+		p.trails.equipped = def.Id
+	end)
+	TrailFx.apply(player)
+	Net.notify(player, `Equipped the {def.Name}.`)
 end
 
 -- Water tiers in order (channel -> sprinkler -> pond). The client names the tier so a stale
@@ -181,7 +269,10 @@ end
 function Shop.start()
 	Net.on("BuyWater", { "string" }, buyWater)
 	Net.on("UnlockBiome", { "string" }, unlockBiome)
-	Net.on("BuyShovel", {}, buyShovel)
+	Net.on("BuyShovel", { "number" }, buyShovel)
+	Net.on("EquipShovel", { "number" }, equipShovel)
+	Net.on("BuyTrail", { "string" }, buyTrail)
+	Net.on("EquipTrail", { "string" }, equipTrail)
 	Net.on("BuyPortal", {}, Shop.buyPortal)
 	Net.on("BuyLane", {}, buyLane)
 	Net.on("BuyHouse", {}, buyHouse)
