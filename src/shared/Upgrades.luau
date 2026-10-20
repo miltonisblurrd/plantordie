@@ -25,7 +25,7 @@ export type WaterTier = {
 }
 
 local shovels: { Shovel } = {
-	{ Tier = 1, Name = "Rusty Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Damage = 2, Color = Color3.fromHex("#8B6B4A") },
+	{ Tier = 1, Name = "Starter Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Damage = 2, Color = Color3.fromHex("#8B6B4A") },
 	{ Tier = 2, Name = "Iron Shovel", Cost = 10_000, DigSeconds = 2.2, LuckBonus = 0.05, ToughTier = 2, Damage = 5, Color = Color3.fromHex("#B0B6BE") },
 	{ Tier = 3, Name = "Golden Shovel", Cost = 1_000_000, DigSeconds = 1.5, LuckBonus = 0.12, ToughTier = 3, Damage = 10, Color = Color3.fromHex("#FFC83D") },
 	{ Tier = 4, Name = "Crystal Shovel", Cost = 30_000_000, DigSeconds = 1, LuckBonus = 0.25, ToughTier = 4, Damage = 18, Color = Color3.fromHex("#5CE1E6") },
