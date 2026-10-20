@@ -69,7 +69,11 @@ local function handle(player: Player, spotId: string)
 		Net.notify(player, "Equip your shovel to dig.", "warn")
 		return
 	end
-	local shovel = Upgrades.Shovels[session.data.shovelTier] or Upgrades.Shovels[1]
+	local shovel = Upgrades.Shovels[session.data.shovels.equipped] or Upgrades.Shovels[1]
+	if shovel.ToughTier < spot.requiredTier then
+		Net.notify(player, `Tough soil! You need a tier {spot.requiredTier} shovel.`, "warn")
+		return
+	end
 	if (lastDig[player] or 0) + shovel.DigSeconds > now then
 		return
 	end

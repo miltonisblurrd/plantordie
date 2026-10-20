@@ -1,5 +1,5 @@
 --!strict
--- Gives every player a part-built Shovel tool matching their saved shovel tier.
+-- Gives every player a part-built Shovel tool matching their equipped shovel.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -32,7 +32,7 @@ local function buildShovel(tier: number): Tool
 	blade.Name = "Blade"
 	blade.Size = Vector3.new(1.6, 1.8, 0.25)
 	blade.Color = def.Color
-	blade.Material = if def.Tier >= 4 then Enum.Material.Neon else Enum.Material.SmoothPlastic
+	blade.Material = def.Material
 	blade.CanCollide = false
 	blade.Massless = true
 	blade.CFrame = handle.CFrame * CFrame.new(0, -3, 0)
@@ -41,6 +41,40 @@ local function buildShovel(tier: number): Tool
 	weld.Part0 = handle
 	weld.Part1 = blade
 	weld.Parent = blade
+
+	local collar = Instance.new("Part")
+	collar.Name = "Collar"
+	collar.Size = Vector3.new(0.6, 0.5, 0.6)
+	collar.Color = def.Accent
+	collar.Material = Enum.Material.SmoothPlastic
+	collar.CanCollide = false
+	collar.Massless = true
+	collar.CFrame = handle.CFrame * CFrame.new(0, -2.05, 0)
+	collar.Parent = tool
+	local collarWeld = Instance.new("WeldConstraint")
+	collarWeld.Part0 = handle
+	collarWeld.Part1 = collar
+	collarWeld.Parent = collar
+
+	if def.Effect == "Fire" then
+		local fire = Instance.new("Fire")
+		fire.Color = def.Color
+		fire.SecondaryColor = def.Accent
+		fire.Size = 2
+		fire.Heat = 3
+		fire.Parent = blade
+	elseif def.Effect then
+		local fx = Instance.new("ParticleEmitter")
+		fx.Texture = if def.Effect == "Smoke" then "rbxasset://textures/particles/smoke_main.dds" else "rbxasset://textures/particles/sparkles_main.dds"
+		fx.Color = ColorSequence.new(def.Color, def.Accent)
+		fx.LightEmission = if def.Effect == "Smoke" then 0.2 else 0.8
+		fx.Size = NumberSequence.new(if def.Effect == "Stars" then 0.35 else 0.25, 0)
+		fx.Lifetime = NumberRange.new(0.5, 0.9)
+		fx.Speed = NumberRange.new(0.5, 1.5)
+		fx.SpreadAngle = Vector2.new(180, 180)
+		fx.Rate = if def.Effect == "Stars" then 10 else 6
+		fx.Parent = blade
+	end
 	return tool
 end
 
@@ -67,7 +101,7 @@ function Tools.giveShovel(player: Player)
 	clear(backpack)
 	clear(gear)
 	clear(character)
-	local tier = session.data.shovelTier
+	local tier = session.data.shovels.equipped
 	-- StarterGear copies into each new Backpack, so respawns keep a shovel even before this reruns.
 	if gear then
 		buildShovel(tier).Parent = gear
