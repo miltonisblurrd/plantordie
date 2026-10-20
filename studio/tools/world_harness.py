@@ -807,6 +807,127 @@ do
 		req, tostring(IR.Rewards.GreenMeadows.Cash), tostring(IR.Rewards.ForbiddenBloom.Cash)))
 end
 
+print("\n-- Bats: hit validation, steal window, hit touches only the carried seed, 16 skins --")
+do
+	local BCore = require(Server.Bat.Core)
+	local CCore = require(Server.Carry.Core)
+	local IR = require(Shared.IndexRewards)
+	local Schema = require(Server.Data.Schema)
+	local BiomeRegions = require(Shared.BiomeRegions)
+	local W = Config.World
+	local R = Config.Bat
+	assert(R.Cooldown == 1.2 and R.Range == 7 and R.ConeDot == 0.3 and R.KnockH == 45 and R.KnockUp == 25
+		and R.StunSeconds == 0.8 and R.StealWindow == 3 and R.MaxVel == 70)
+	local fwd = Vector3.new(0, 0, -1)
+	local function atk(over) local a = { pos = Vector3.zero, look = fwd, alive = true, safe = false, lastSwing = -math.huge }
+		for k, v in over or {} do a[k] = v end return a end
+	local function tgt(key, pos, over) local t = { key = key, pos = pos, alive = true, safe = false, los = true }
+		for k, v in over or {} do t[k] = v end return t end
+	local inFront = tgt("v", Vector3.new(0, 0, -5))
+	assert(BCore.pick(atk(), { inFront }, 10, R) == inFront, "valid hit accepted")
+	local function refused(a, ts, want)
+		local t, why = BCore.pick(a, ts, 10, R)
+		assert(t == nil and why == want, ("expected %s, got %s"):format(want, tostring(why)))
+	end
+	refused(atk(), { tgt("v", Vector3.new(0, 0, -7.5)) }, "range")
+	refused(atk(), { tgt("v", Vector3.new(5, 0, 0)) }, "cone")
+	refused(atk(), { tgt("v", Vector3.new(0, 0, 5)) }, "cone")
+	refused(atk({ lastSwing = 9 }), { inFront }, "cooldown")
+	assert(BCore.pick(atk({ lastSwing = 10 - R.Cooldown - 0.01 }), { inFront }, 10, R) == inFront, "cooldown elapsed")
+	refused(atk({ safe = true }), { inFront }, "safe")
+	refused(atk(), { tgt("v", Vector3.new(0, 0, -5), { safe = true }) }, "target safe")
+	refused(atk(), { tgt("v", Vector3.new(0, 0, -5), { los = false }) }, "los")
+	refused(atk(), { tgt("v", Vector3.new(0, 0, -5), { alive = false }) }, "dead")
+	refused(atk({ alive = false }), { inFront }, "dead")
+	local near, far = tgt("near", Vector3.new(1, 0, -3)), tgt("far", Vector3.new(0, 0, -6))
+	assert(BCore.pick(atk(), { far, near }, 10, R) == near, "nearest wins")
+	local k = BCore.knock(Vector3.zero, Vector3.new(0, 0, -5), fwd, R)
+	assert(k.Magnitude <= R.MaxVel + 1e-6 and k.Y > 0 and k.Z < 0 and math.abs(k.X) < 1e-9, "knock away + up, clamped")
+	local BatSrv = require(Server.Bat)
+	assert(BatSrv.inSafeZone(Vector3.new(0, W.GroundY + 3, -70)), "hub is safe")
+	assert(BatSrv.inSafeZone(BiomeRegions.safeCenter(Biomes.List[1].Id)), "biome safe circle is safe")
+	assert(not BatSrv.inSafeZone(BiomeRegions.cframe(1).Position + Vector3.new(0, 3, 30)), "open biome ground is not safe")
+
+	-- Steal window in Carry.Core.
+	local s = CCore.new(20, 20)
+	local p0 = Vector3.zero
+	local seed = CCore.reveal(s, "victim", "Sunpetal", "Common", "GreenMeadows", p0, 0)
+	local other = CCore.reveal(s, "victim", "PeaPopper", "Rare", "GreenMeadows", p0, 0)
+	assert(CCore.pickup(s, "victim", seed.id, 1) == seed)
+	assert(CCore.drop(s, "victim", p0, 10, "attacker", R.StealWindow) == seed and seed.expiresAt == 30, "hit drop keeps the 20 s timer")
+	assert(select(2, CCore.pickup(s, "bystander", seed.id, 10.5)) == "not yours", "bystander refused")
+	assert(s.canTake(seed, "attacker", 12.9) and not s.canTake(seed, "attacker", 13), "attacker only inside the window")
+	assert(s.canTake(seed, "victim", 10) and s.canTake(seed, "victim", 29), "owner always allowed")
+	assert(CCore.pickup(s, "attacker", seed.id, 12) == seed and seed.owner == "attacker" and seed.carrier == "attacker", "steal makes attacker owner+carrier")
+	assert(select(2, CCore.pickup(s, "victim", seed.id, 12)) == "taken", "one pickup wins")
+	assert(seed.stealer == nil, "window cleared on pickup")
+	assert(CCore.drop(s, "attacker", p0, 20) == seed and not s.canTake(seed, "victim", 21) and s.canTake(seed, "attacker", 21), "stolen seed now the attacker's")
+	assert(CCore.pickup(s, "attacker", seed.id, 21) == seed)
+	assert(CCore.drop(s, "attacker", p0, 22, "victim", R.StealWindow) == seed)
+	assert(select(2, CCore.pickup(s, "victim", seed.id, 25.5)) == "not yours", "after the window only the owner")
+	assert(CCore.pickup(s, "attacker", seed.id, 26) == seed)
+	assert(CCore.drop(s, "attacker", p0, 30, "attacker", R.StealWindow) and seed.stealer == nil, "no self-steal window")
+	local n = 0
+	for _ in s.items do n += 1 end
+	local carriers = 0
+	for _ in s.byCarrier do carriers += 1 end
+	assert(n == 2 and carriers == 0 and s.items[other.id] == other and other.state == "revealed", "no dupes, other seed untouched")
+
+	-- A hit only moves the carried seed; nothing saved changes.
+	local prof = Schema.default()
+	prof.money, prof.seeds = 999, { Sunpetal = 3 }
+	prof.plants["1"] = { id = "1", species = "PeaPopper", rarity = "Common", size = "Medium", variant = "Normal" }
+	local function dump(v, out, path)
+		if type(v) == "table" and getmetatable(v) == nil then
+			local keys = {}
+			for key in v do table.insert(keys, tostring(key)) end
+			table.sort(keys)
+			for _, key in keys do dump(v[key] ~= nil and v[key] or v[tonumber(key)], out, path .. "." .. key) end
+		else
+			table.insert(out, path .. "=" .. tostring(v))
+		end
+		return out
+	end
+	local before = table.concat(dump(prof, {}, ""), "\n")
+	local s2 = CCore.new(20, 20)
+	local carried = CCore.reveal(s2, "victim", "IceRose", "Rare", "FrostbiteGarden", p0, 0)
+	local lying = CCore.reveal(s2, "victim", "Sunpetal", "Common", "GreenMeadows", p0, 0)
+	CCore.pickup(s2, "victim", carried.id, 0)
+	local snapLying = table.concat(dump(lying, {}, ""), "\n")
+	local hitT = BCore.pick(atk(), { tgt("victim", Vector3.new(0, 0, -4)) }, 5, R)
+	assert(hitT and CCore.drop(s2, hitT.key, p0, 5, "attacker", R.StealWindow) == carried)
+	assert(table.concat(dump(prof, {}, ""), "\n") == before, "profile unchanged by a hit")
+	assert(table.concat(dump(lying, {}, ""), "\n") == snapLying and carried.state == "dropped", "only the carried seed moved")
+
+	-- 16 skins, identical tool stats.
+	local Tools = require(Server.Tools)
+	assert(#IR.Skins == 16)
+	local function shape(tool)
+		local parts = {}
+		for _, c in tool:GetChildren() do
+			if c.ClassName == "Part" and c.Name ~= "Accent" then
+				table.insert(parts, ("%s %.2f,%.2f,%.2f"):format(c.Name, c.Size.X, c.Size.Y, c.Size.Z))
+			end
+		end
+		table.sort(parts)
+		return ("%s grip %.2f drop %s | %s"):format(tool.Name, tool.Grip.Position.Y, tostring(tool.CanBeDropped), table.concat(parts, "; "))
+	end
+	local ref, glow = nil, 0
+	for _, skin in IR.Skins do
+		local tool = Tools.buildBat(skin.Id)
+		local sh = shape(tool)
+		ref = ref or sh
+		assert(sh == ref, skin.Id .. " bat differs: " .. sh)
+		assert(tool:GetAttribute("Skin") == skin.Id and tool.Handle.Color == skin.Secondary and tool.Barrel.Color == skin.Primary)
+		if tool:FindFirstChild("Accent") then glow += 1 end
+	end
+	assert(glow == 5, "Neon accent only on the 5 glow skins")
+	assert(IR.SkinById.Wooden.Primary.R == 0xB0 / 255)
+	print(("  validator: valid hit ok; range/cone/cooldown/safe/target-safe/LOS/dead refused; knock |v| %.1f <= %d"):format(k.Magnitude, R.MaxVel))
+	print("  steal window: attacker <3 s ok, refused after, owner always, one pickup wins, no dupes; hit leaves profile identical")
+	print("  16 bats build: " .. ref)
+end
+
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
 local Core = require(Server.Defense.Core)
 local Zombies = require(Shared.Zombies)
