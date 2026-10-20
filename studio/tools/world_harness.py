@@ -481,12 +481,12 @@ do
 	assert(Upgrades.Shovels[1].DigSeconds == 3 and Upgrades.Shovels[10].DigSeconds == 0.5 and Upgrades.Shovels[10].LuckBonus == Config.Dig.MaxLuck)
 	print("10 shovels: names and prices exact; damage " .. table.concat(dmg, ",") .. "; dig 3s -> 0.5s; luck 0 -> " .. Config.Dig.MaxLuck)
 
-	assert(Config.Data.SchemaVersion == 8)
+	assert(Config.Data.SchemaVersion >= 8)
 	local v7 = Schema.default()
 	v7.version, v7.shovelTier, v7.shovels = 7, 4, nil
 	v7.trails = { owned = { Starter = true, Nature = true }, equipped = "Nature" }
 	local m = assert(Schema.migrate(v7))
-	assert(m.version == 8 and m.shovels.equipped == 4 and m.shovelTier == 4)
+	assert(m.version == Config.Data.SchemaVersion and m.shovels.equipped == 4 and m.shovelTier == 4)
 	for t = 1, 10 do
 		assert((m.shovels.owned[tostring(t)] == true) == (t <= 4), "v7 tier 4 must own exactly 1..4")
 	end
@@ -651,6 +651,83 @@ do
 	end
 	print(("  15 biomes: emoji + RecommendedSpeed exact; speed text %s"):format(table.concat(shown, ", ")))
 	print(("  regionOf: server == shared == pre-move math at %d points (%d inside, %d outside); hub, plots, trail gaps -> nil"):format(n, inside, outside))
+end
+
+print("\n== Guardian chase: speed, v9 migration, carry state machine ==")
+do
+	local Speed = require(Shared.Speed)
+	local Schema = require(Server.Data.Schema)
+	local CCore = require(Server.Carry.Core)
+	local G = Config.Guardian
+	assert(G.SpeedFactor == 0.97 and G.PatrolFactor == 0.5 and G.MaxChaseSeconds == 60 and Config.Carry.SpeedFactor == 0.9)
+	assert(Guardians.ByBiome.MushroomForest.Name == "Fungal Brute", "Mushroom Forest guardian is Fungal Brute")
+	local names, prev = {}, -1
+	print("  biome              rec speed  player  guardian  patrol  carrying  margin(carry)")
+	for _, b in Biomes.List do
+		local gd = Guardians.ByBiome[b.Id]
+		assert(gd and not names[gd.Name], "unique guardian per biome: " .. b.Id)
+		names[gd.Name] = true
+		local player = Speed.walkSpeedFor(b.RecommendedSpeed)
+		local gs = Speed.guardianSpeedFor(b.RecommendedSpeed)
+		assert(gs >= prev, "guardianSpeedFor must be monotonic at " .. b.Id)
+		assert(gs >= 15.5 and gs <= 40, ("%s guardian speed %.2f outside 15.5..40"):format(b.Id, gs))
+		assert(player > gs, b.Id .. ": a player at recommended speed must outrun the guardian")
+		prev = gs
+		local carry = player * Config.Carry.SpeedFactor
+		print(("  %-17s %10s  %6.2f  %8.2f  %6.2f  %8.2f  %+6.2f"):format(b.Id, tostring(b.RecommendedSpeed), player, gs, gs * G.PatrolFactor, carry, carry - gs))
+	end
+	assert(#Guardians.List == 15)
+
+	local v8 = Schema.default()
+	v8.version = 8
+	v8.seeds = { Sunpetal = 2 }
+	v8.expedition = { Sunpetal = 3, PeaPopper = 1, Bogus = "x" }
+	local m = assert(Schema.migrate(v8))
+	assert(m.version == 9 and Config.Data.SchemaVersion == 9)
+	assert(m.seeds.Sunpetal == 5 and m.seeds.PeaPopper == 1 and m.seeds.Bogus == nil, "bag banked into seeds")
+	assert(next(m.expedition) == nil, "expedition stays empty")
+	local again = assert(Schema.migrate(m))
+	assert(again.seeds.Sunpetal == 5, "re-migrating a v9 record changes nothing")
+	local noBag = Schema.default()
+	noBag.version, noBag.expedition = 8, nil
+	assert(next(assert(Schema.migrate(noBag)).expedition) == nil)
+	print("  schema v8 -> v9: expedition {Sunpetal 3, PeaPopper 1} + seeds {Sunpetal 2} -> seeds {Sunpetal 5, PeaPopper 1}, bag empty")
+
+	local s = CCore.new(20, 20)
+	local p0 = Vector3.new(0, 0, 0)
+	local a = CCore.reveal(s, "alice", "Sunpetal", "Common", "GreenMeadows", p0, 0)
+	assert(a.state == "revealed" and a.expiresAt == 20)
+	local _, why = CCore.pickup(s, "bob", a.id, 1)
+	assert(why == "not yours", "only the owner picks up")
+	assert(CCore.pickup(s, "alice", a.id, 1) == a and a.state == "carried" and CCore.carried(s, "alice") == a)
+	local _, why2 = CCore.pickup(s, "alice", a.id, 1)
+	assert(why2 == "taken", "second pickup of the same seed fails")
+	local b2 = CCore.reveal(s, "alice", "PeaPopper", "Rare", "GreenMeadows", p0, 1)
+	local _, why3 = CCore.pickup(s, "alice", b2.id, 2)
+	assert(why3 == "already carrying", "one seed at a time")
+	assert(#CCore.expire(s, 100) == 1 and s.items[b2.id] == nil and s.items[a.id], "revealed seed expires, carried never does")
+	assert(CCore.drop(s, "alice", Vector3.new(5, 0, 5), 100) == a and a.state == "dropped" and a.expiresAt == 120)
+	assert(CCore.carried(s, "alice") == nil and CCore.drop(s, "alice", p0, 100) == nil)
+	assert(#CCore.expire(s, 119.9) == 0)
+	assert(CCore.pickup(s, "alice", a.id, 110) == a and a.expiresAt == math.huge)
+	assert(CCore.drop(s, "alice", p0, 110) and a.expiresAt == 130, "each drop restarts the full timer")
+	-- One pickup wins when two players race for a seed both may take.
+	s.canTake = function() return true end
+	local w1 = CCore.pickup(s, "bob", a.id, 111)
+	local w2, why4 = CCore.pickup(s, "carol", a.id, 111)
+	assert(w1 == a and w2 == nil and why4 == "taken" and a.carrier == "bob")
+	assert(CCore.transfer(s, "bob", "bob") == nil, "no self transfer")
+	assert(CCore.transfer(s, "bob", "carol") == a and a.carrier == "carol" and CCore.carried(s, "bob") == nil and CCore.carried(s, "carol") == a)
+	local c2 = CCore.reveal(s, "dave", "Sunpetal", "Common", "GreenMeadows", p0, 111)
+	assert(CCore.pickup(s, "dave", c2.id, 111) == c2)
+	assert(CCore.transfer(s, "carol", "dave") == nil and CCore.carried(s, "carol") == a, "no transfer onto a carrier")
+	assert(CCore.bank(s, "carol") == a and s.items[a.id] == nil and CCore.carried(s, "carol") == nil)
+	assert(CCore.bank(s, "carol") == nil and CCore.pickup(s, "carol", a.id, 112) == nil, "banked seed is gone")
+	assert(CCore.drop(s, "dave", p0, 200) and #CCore.expire(s, 220) == 1 and next(s.items) == nil, "dropped seed gone at 0")
+	local carriers = 0
+	for _ in s.byCarrier do carriers += 1 end
+	assert(carriers == 0, "no leftover carriers")
+	print("  carry core: owner-only pickup, one seed each, one pickup wins, drop timer resets, transfer atomic, bank removes, expiry permanent")
 end
 
 print("\n== Defense: wave simulation (Defense.Core, real modules, dt 0.1s) ==")
@@ -1077,7 +1154,9 @@ do
 	assert(Events.guardianEvent(e.StartsAt - 60) == nil and Events.guardianEvent(e.EndsAt + 60) == nil)
 	local gm = Guardians.ByBiome[Biomes.List[1].Id]
 	local hg = Guardians.Event.Halloween2026
-	assert(hg.ChaseSpeed > gm.ChaseSpeed and hg.DetectRange > gm.DetectRange, "spookier than Green Meadows")
+	local Speed = require(Shared.Speed)
+	local hs, gs = Speed.guardianSpeedFor(hg.RecommendedSpeed), Speed.guardianSpeedFor(Biomes.List[1].RecommendedSpeed)
+	assert(hs > gs, "faster than Green Meadows")
 	local ok, GuardianAI = pcall(require, Server.GuardianAI)
 	assert(ok, "GuardianAI loads: " .. tostring(GuardianAI))
 	assert(GuardianAI.eventGuardianCount() == 0)
@@ -1085,8 +1164,7 @@ do
 	assert(GuardianAI.eventGuardianCount() == 1, "spawned while active")
 	GuardianAI.setEventGuardian(Events.guardianEvent(e.EndsAt + 60))
 	assert(GuardianAI.eventGuardianCount() == 0, "removed when the event ends")
-	print(("  active -> 1 guardian, off -> 0; walk %.1f chase %.1f detect %d leash %d (Green Meadows %.1f/%.1f/%d/%d)"):format(
-		hg.WalkSpeed, hg.ChaseSpeed, hg.DetectRange, hg.LeashRange, gm.WalkSpeed, gm.ChaseSpeed, gm.DetectRange, gm.LeashRange))
+	print(("  active -> 1 guardian, off -> 0; chase %.2f (Green Meadows %.2f)"):format(hs, gs))
 end
 '''
 
