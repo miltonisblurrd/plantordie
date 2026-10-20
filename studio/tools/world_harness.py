@@ -368,6 +368,188 @@ end
 print(("Total ~%.0f min (~%.1f h) including %.0f min of growth; excludes refill walks and house purchases"):format(total, total / 60, totalGrow))
 print("Minutes row: " .. table.concat(steps, " | "))
 
+print("\n== Progression sim: one player, biome by biome (deterministic) ==")
+do
+	-- Player model and targets. Every number the sim assumes lives here.
+	local SIM = {
+		Dt = 5, -- seconds per step
+		TreadmillShare = 0.30, -- share of play time on the belt; the rest is digging while the garden earns
+		SaveShare = 0.5, -- while saving for the next unlock, upgrades may spend this share of cash
+		DigWalkSeconds = 6, -- walking from spot to spot, per dig
+		BankTripSeconds = 60, -- carrying a new species to the hub to record it
+		-- Targets.
+		RecVsAffordMax = 1.5, -- time to reach a biome's RecommendedSpeed <= this x time to afford it ...
+		RecVsAffordSlackMin = 5, -- ... plus this many minutes (early unlocks take seconds)
+		TotalHoursMin = 25, TotalHoursMax = 60, -- to Forbidden Bloom's recommendation
+		WallHoursMax = 3, -- no biome step longer than this
+		SwingsMin = 3, SwingsMax = 8, -- normal spot, owned shovel on arrival
+		Enforce = true, -- fail the harness on any MISS
+	}
+	local Economy = require(Shared.Economy)
+	local Treadmill = require(Shared.Treadmill)
+	local Trails = require(Shared.Trails)
+	local IR = require(Shared.IndexRewards)
+	-- Tuning limits from the cut: treadmill <= 60 levels, biome costs strictly increasing.
+	assert(#Treadmill.Levels <= 60, "treadmill has more than 60 levels")
+	for i = 2, #Biomes.List do
+		assert(Biomes.List[i].Cost > Biomes.List[i - 1].Cost, "biome cost must increase at " .. Biomes.List[i].Id)
+	end
+	local Format = require(Shared.Format)
+
+	-- Full garden of the biome's drops: drop-weighted, size-weighted Economy.incomeOf.
+	local function gardenIncome(k)
+		local b = Biomes.List[k]
+		local slots = Houses.List[1].Slots
+		for _, h in Houses.List do if h.RequiredBiome <= k then slots = h.Slots end end
+		local num, den, grow = 0, 0, 0
+		for _, d in DropTables.ByBiome[b.Id] do
+			local def = Plants.ById[d.Plant]
+			local sNum, sDen = 0, 0
+			for _, s in Sizes.List do
+				local w = if def.SizeWeights then (def.SizeWeights[s.Id] or 0) else s.Weight
+				sNum += w * Economy.incomeOf({ species = d.Plant, rarity = def.Rarity, size = s.Id, variant = "Normal" })
+				sDen += w
+			end
+			num += d.Weight * sNum / sDen
+			grow += d.Weight * def.GrowSeconds
+			den += d.Weight
+		end
+		return slots * num / den, grow / den
+	end
+	-- Expected digs to see every species once (coupon collector, inclusion-exclusion).
+	local function indexDigs(k, luck)
+		local list = DropTables.weighted(Biomes.List[k].Id, luck)
+		local total = 0
+		for _, d in list do total += d.Weight end
+		local n, e = #list, 0
+		for mask = 1, 2 ^ n - 1 do
+			local p, bits = 0, 0
+			for i = 1, n do
+				if (mask // 2 ^ (i - 1)) % 2 == 1 then p += list[i].Weight / total; bits += 1 end
+			end
+			e += (if bits % 2 == 1 then 1 else -1) / p
+		end
+		return e, n
+	end
+	local function swings(k, tier, tough)
+		local hp = k * Config.Biome.DirtHpPerIndex
+		if tough then hp = math.floor(hp * Config.Biome.ToughHpMultiplier) end
+		return math.ceil(hp / Upgrades.Shovels[tier].Damage)
+	end
+
+	local st = { t = 0, money = 0, speed = 0, level = 1, trail = 1, shovel = 1, bonus = 0, k = 1, unlocked = 1,
+		incomeK = 1, growUntil = 0, digs = 0, claimed = {} }
+	local function gain() return Treadmill.gain(st.level, Trails.List[st.trail].Id, st.bonus) end
+	local function buySpeed(budget)
+		while true do
+			local best, bestValue, bestCost = nil, 0, 0
+			local nextCost = Treadmill.nextCost(st.level)
+			if nextCost and nextCost <= budget then
+				local d = Treadmill.gain(st.level + 1, Trails.List[st.trail].Id, st.bonus) - gain()
+				if d / nextCost > bestValue then best, bestValue, bestCost = "level", d / nextCost, nextCost end
+			end
+			local tr = Trails.List[st.trail + 1]
+			if tr and tr.Price <= budget then
+				local d = Treadmill.gain(st.level, tr.Id, st.bonus) - gain()
+				if d / tr.Price > bestValue then best, bestValue, bestCost = "trail", d / tr.Price, tr.Price end
+			end
+			if not best then return end
+			if best == "level" then st.level += 1 else st.trail += 1 end
+			st.money -= bestCost
+			budget -= bestCost
+		end
+	end
+
+	local rows, stepStart = {}, 0
+	local afforded, reached = nil, nil
+	local arrivedAt = { [1] = 0 }
+	local inc1 = gardenIncome(1)
+	assert(inc1 > 0)
+	while st.k < #Biomes.List or st.speed < Biomes.List[#Biomes.List].RecommendedSpeed do
+		local dt = SIM.Dt
+		local income, _ = gardenIncome(st.incomeK)
+		if st.t >= st.growUntil then st.incomeK = st.k end
+		st.money += income * dt
+		st.speed += gain() * SIM.TreadmillShare * dt
+		-- Index digging in the current biome.
+		if not st.claimed[st.k] then
+			local sh = Upgrades.Shovels[st.shovel]
+			local perDig = swings(st.k, st.shovel) * sh.DigSeconds + SIM.DigWalkSeconds
+			local need, species = indexDigs(st.k, sh.LuckBonus)
+			st.digs += dt * (1 - SIM.TreadmillShare) / perDig
+			if st.digs >= need + species * SIM.BankTripSeconds / perDig then
+				local r = IR.Rewards[Biomes.List[st.k].Id]
+				st.money += r.Cash
+				st.bonus += r.SpeedBonus
+				st.claimed[st.k] = st.t
+			end
+		end
+		local nextB = Biomes.List[st.k + 1]
+		if nextB then
+			if st.unlocked < nextB.Index and st.money >= nextB.Cost then
+				st.money -= nextB.Cost
+				st.unlocked = nextB.Index
+				afforded = st.t - stepStart
+			end
+			local saving = st.unlocked < nextB.Index
+			local budget = if saving then st.money * SIM.SaveShare else st.money
+			local sh = Upgrades.Shovels[st.shovel + 1]
+			if sh and sh.Cost <= budget and sh.Cost <= nextB.Cost then
+				st.money -= sh.Cost
+				st.shovel += 1
+				budget -= sh.Cost
+			end
+			if st.speed < nextB.RecommendedSpeed then buySpeed(budget) end
+			if st.speed >= nextB.RecommendedSpeed and not reached then reached = st.t - stepStart end
+			if st.unlocked == nextB.Index and reached then
+				table.insert(rows, { k = nextB.Index, afford = afforded, rec = reached, wall = st.t - stepStart, shovel = st.shovel, trail = st.trail,
+					level = st.level, swings = swings(nextB.Index, st.shovel), claimedPrev = st.claimed[st.k] ~= nil, money = st.money })
+				st.k = nextB.Index
+				arrivedAt[st.k] = st.t
+				st.growUntil = st.t + select(2, gardenIncome(st.k))
+				st.digs = 0
+				stepStart = st.t
+				afforded, reached = nil, nil
+			end
+		else
+			buySpeed(st.money)
+		end
+		st.t += dt
+		assert(st.t < 5000 * 3600, "sim did not finish in 5000 h")
+	end
+	local total = st.t
+	local function hm(s) return if s >= 3600 then ("%.2fh"):format(s / 3600) else ("%.0fm"):format(s / 60) end
+	print(("model: garden full of the newest biome's drops (house slots by biome), one growth cycle after each move, %d%% of time on the belt"):format(SIM.TreadmillShare * 100))
+	print("  step   biome              cost       afford  reach rec  rec/afford    step  shovel  swings (tough)  trail      Lv  index prev")
+	local worstWall, fails = 0, {}
+	local s1 = swings(1, 1)
+	for _, r in rows do
+		local b = Biomes.List[r.k]
+		local ratio = r.rec / math.max(r.afford, 1)
+		worstWall = math.max(worstWall, r.wall)
+		print(("  %2d->%-2d %-17s %9s  %7s  %9s  %9.2f  %6s  %6d  %6d (%5d)  %-9s  %2d  %s"):format(r.k - 1, r.k, b.Id, Format.short(b.Cost), hm(r.afford),
+			hm(r.rec), ratio, hm(r.wall), r.shovel, r.swings, swings(r.k, r.shovel, true), Trails.List[r.trail].Id, r.level, if r.claimedPrev then "claimed" else "open"))
+		if r.rec > r.afford * SIM.RecVsAffordMax + SIM.RecVsAffordSlackMin * 60 then
+			table.insert(fails, ("%s: rec %s > %.1f x afford %s"):format(b.Id, hm(r.rec), SIM.RecVsAffordMax, hm(r.afford)))
+		end
+		if r.wall > SIM.WallHoursMax * 3600 then table.insert(fails, ("%s: wall %s > %dh"):format(b.Id, hm(r.wall), SIM.WallHoursMax)) end
+		if r.swings < SIM.SwingsMin or r.swings > SIM.SwingsMax then
+			table.insert(fails, ("%s: %d swings with tier %d"):format(b.Id, r.swings, r.shovel))
+		end
+	end
+	if s1 < SIM.SwingsMin or s1 > SIM.SwingsMax then table.insert(fails, ("GreenMeadows: %d swings with tier 1"):format(s1)) end
+	print(("  end: Forbidden Bloom recommendation at %s; shovel %d, trail %s, treadmill Lv%d, speed bonus +%d%%, gain %s/s, $%s left"):format(
+		hm(total), st.shovel, Trails.List[st.trail].Id, st.level, math.floor(st.bonus * 100 + 0.5), Format.short(gain()), Format.short(st.money)))
+	print(("  targets: rec <= %.1fx afford (+%d min), total %d-%d h, wall <= %d h, %d-%d swings"):format(SIM.RecVsAffordMax,
+		SIM.RecVsAffordSlackMin, SIM.TotalHoursMin, SIM.TotalHoursMax, SIM.WallHoursMax, SIM.SwingsMin, SIM.SwingsMax))
+	if total < SIM.TotalHoursMin * 3600 or total > SIM.TotalHoursMax * 3600 then
+		table.insert(fails, ("total %s outside %d-%d h"):format(hm(total), SIM.TotalHoursMin, SIM.TotalHoursMax))
+	end
+	for _, f in fails do print("  MISS " .. f) end
+	print(("  target checks: %s (worst step %s)"):format(if #fails == 0 then "PASS" else "FAIL", hm(worstWall)))
+	assert(#fails == 0 or not SIM.Enforce, "progression targets missed")
+end
+
 print("\n== Treadmill, speed and saved data ==")
 do
 	local Speed = require(Shared.Speed)
@@ -437,9 +619,18 @@ do
 			assert(not overlap(a, b, refs.spawn.Position - Vector3.new(3, 0, 3), refs.spawn.Position + Vector3.new(3, 0, 3)), part.Name .. " blocks the spawn")
 		end
 	end
-	assert(refs.belt and refs.treadmillLevelLabel.Text == "Lv. 1 > Lv. 2" and refs.treadmillMoneyLabel.Text == "$230")
+	assert(refs.belt and refs.treadmillLevelLabel.Text == "Lv. 1 > Lv. 2" and refs.treadmillMoneyLabel.Text == Format.money(Treadmill.Levels[2].Cost))
+	local robuxPrompt = refs.treadmillSign:FindFirstChild("TreadmillRobuxPrompt")
 	PlotBuilder.setTreadmill(refs, Treadmill.MaxLevel)
 	assert(refs.treadmillMoneyLabel.Text == "MAX")
+	assert(refs.treadmillRobuxLabel.Parent.Visible == false and robuxPrompt.Enabled == false, "R$ button hidden and prompt off at MAX")
+	PlotBuilder.setTreadmill(refs, Treadmill.MaxLevel - 1)
+	assert(refs.treadmillRobuxLabel.Parent.Visible == true and robuxPrompt.Enabled == true, "R$ button back below MAX")
+	local PCore = require(Server.Purchases.Core)
+	assert(PCore.refusal({ treadmillLevel = Treadmill.MaxLevel }, "TreadmillLevel") ~= nil, "receipt refused at MAX")
+	assert(PCore.refusal({ treadmillLevel = Treadmill.MaxLevel - 1 }, "TreadmillLevel") == nil)
+	assert(PCore.refusal({ treadmillLevel = Treadmill.MaxLevel }, "GrowthBoost") == nil)
+	print("treadmill at MAX: R$ button hidden, R$ prompt disabled, receipt refused (no credit banked)")
 	print(("treadmill + sign: %d parts per plot, clear of garden, houses, spawn"):format(n))
 end
 
@@ -758,8 +949,8 @@ do
 		assert(not names[skin.Name], "unique skin " .. skin.Name)
 		names[skin.Name] = true
 	end
-	assert(IR.Rewards.GreenMeadows.Cash == Biomes.List[2].Cost * 2)
-	assert(IR.Rewards.ForbiddenBloom.Cash == Biomes.List[15].Cost * 20)
+	assert(IR.Rewards.GreenMeadows.Cash == math.max(5000, Biomes.List[2].Cost * IR.CashNextMultiplier))
+	assert(IR.Rewards.ForbiddenBloom.Cash == Biomes.List[15].Cost * IR.CashLastMultiplier)
 	assert(IR.SkinById.Wooden and IR.DefaultSkin == "Wooden")
 
 	local function prof()

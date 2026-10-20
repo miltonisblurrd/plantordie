@@ -35,7 +35,8 @@ end
 
 local SPEED_BONUS = 0.10
 local MIN_CASH = 5_000
-local LAST_MULT = 20
+local NEXT_MULT = 0.25 -- cash = this x the next biome's unlock cost
+local LAST_MULT = 1
 local DEFAULT_SKIN = "Wooden"
 
 local skins: { Skin } = {
@@ -84,7 +85,7 @@ for i, b in Biomes.List do
 	end
 	required[b.Id] = ids
 	local nextBiome = Biomes.List[i + 1]
-	local cash = if nextBiome then nextBiome.Cost * 2 else b.Cost * LAST_MULT
+	local cash = if nextBiome then nextBiome.Cost * NEXT_MULT else b.Cost * LAST_MULT
 	rewards[b.Id] = { Cash = math.max(MIN_CASH, cash), SpeedBonus = SPEED_BONUS, Skin = SKIN_FOR[b.Id] or DEFAULT_SKIN }
 end
 
@@ -92,6 +93,8 @@ local IndexRewards = {
 	Skins = skins,
 	SkinById = skinById,
 	DefaultSkin = DEFAULT_SKIN,
+	CashNextMultiplier = NEXT_MULT,
+	CashLastMultiplier = LAST_MULT,
 	Required = required,
 	Rewards = rewards,
 }

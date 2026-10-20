@@ -53,15 +53,14 @@ local function rgb(r: number, g: number, b: number): Color3
 	return Color3.fromRGB(r, g, b)
 end
 
--- Pacing (full maths in studio/tasks/pod-v2/pacing.md). Every number below derives from two
--- per-biome curves so the roster stays balanced as a whole:
+-- Pacing (full maths in studio/tasks/balance-pass/pacing.md; formulas from pod-v2). Every number
+-- below derives from two per-biome curves so the roster stays balanced as a whole:
 --   BaseIncome  = BIOME_INCOME[biome] x flavour        ($/s before rarity/size/variant)
 --   GrowSeconds = BIOME_GROW[biome]   x RARITY_GROW[rarity]
--- Economy.incomeOf then applies rarity (1..25x) and size (1..25x). A full garden of the newest
--- biome's typical drops earns the next biome's cost in ~6-12 minutes for biomes 1-6, stretching to
--- ~10-40 minutes for 7-15. Late values look uneven because each biome's rarity mix differs; the
--- garden's average income per plant still rises every biome (checked by the harness).
-local BIOME_INCOME = { 2, 8, 52, 185, 500, 334, 525, 338, 475, 335, 217, 219, 146, 147, 180 }
+-- Economy.incomeOf then applies rarity (1..25x) and size (1..25x). Biomes 6-15 climb steeply so a
+-- full garden pays the biome, shovel and trail ladders (up to $4.5T) in ~1-3 h steps; the harness
+-- progression sim checks it. The garden's average income per plant rises every biome.
+local BIOME_INCOME = { 2, 8, 52, 185, 500, 460, 1_730, 1_750, 8_150, 15_500, 30_500, 88_000, 450_000, 650_000, 2_450_000 }
 local BIOME_GROW = { 30, 40, 55, 75, 100, 135, 180, 240, 320, 420, 560, 740, 980, 1300, 1700 }
 local RARITY_GROW: { [string]: number } =
 	{ Common = 1, Uncommon = 1.4, Rare = 2, Epic = 3, Legendary = 4.5, Mythical = 6, Divine = 9 }

@@ -6,14 +6,22 @@ local Trails = require(script.Parent.Trails)
 
 export type Level = { Level: number, SpeedPerSec: number, Cost: number }
 
-local MAX_LEVEL = 30
+-- Two segments (pacing in studio/tasks/balance-pass/pacing.md). Levels 1..CURVE_BREAK pace
+-- biomes 1-13; the levels above it are the cosmic tier, where speed/s climbs far faster than price
+-- because Cosmic Garden asks for 2000x Ancient Wilds' recommended speed.
+local MAX_LEVEL = 60
+local CURVE_BREAK = 50
+local RATE_LOW, RATE_HIGH = 1.35, 2.3
+local COST_BASE, COST_LOW, COST_HIGH = 100, 1.52, 1.05
 
 local levels: { Level } = {}
 for l = 1, MAX_LEVEL do
+	local low, high = math.min(l, CURVE_BREAK) - 1, math.max(0, l - CURVE_BREAK)
+	local prev = levels[l - 1]
 	levels[l] = {
 		Level = l,
-		SpeedPerSec = math.round(1.9 ^ (l - 1)),
-		Cost = if l == 1 then 0 else math.round(100 * 2.3 ^ (l - 1)),
+		SpeedPerSec = math.max(if prev then prev.SpeedPerSec + 1 else 1, math.round(RATE_LOW ^ low * RATE_HIGH ^ high)),
+		Cost = if l == 1 then 0 else math.round(COST_BASE * COST_LOW ^ low * COST_HIGH ^ high),
 	}
 end
 

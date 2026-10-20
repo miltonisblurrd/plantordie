@@ -56,9 +56,10 @@ local Config = {
 		ToughSpots = 3,
 		EnforceSeconds = 0.5,
 		PathWidth = 8,
-		-- Dirt HP = Index * this. Tough mounds use the tough multiplier.
-		DirtHpPerIndex = 4,
-		ToughHpMultiplier = 2.5,
+		-- Dirt HP = Index * this. Tough mounds use the tough multiplier. With each biome's expected
+		-- shovel a normal mound takes 3-8 swings (harness progression sim).
+		DirtHpPerIndex = 10,
+		ToughHpMultiplier = 2,
 	},
 
 	Dig = {
