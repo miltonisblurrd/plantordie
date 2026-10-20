@@ -13,6 +13,9 @@ local Parts = require(script.Parent.Parts)
 local B = Config.Biome
 local WALL_H = 12
 local ENTRANCE_W = 26
+local DESIGN_SIZE = 56 -- builders' scatter counts were tuned for this biome size
+local SCATTER_CAP = 2 -- full area scale (4x at 112) blows the boot part budget
+local SPOT_GAP = 8
 
 export type Ctx = {
 	biome: BiomeData.Biome,
@@ -80,7 +83,10 @@ function Kit.isClear(ctx: Ctx, x: number, z: number, margin: number): boolean
 	if (Vector2.new(x, z) - Vector2.new(0, safeZ)).Magnitude < B.SafeRadius + 10 then
 		return false
 	end
-	return not (math.abs(x) < 8 and z < -ctx.size / 2 + 14)
+	if math.abs(x) < 8 and z < -ctx.size / 2 + 14 then
+		return false
+	end
+	return not (ctx.biome.Index < BiomeData.Count and math.abs(x) < 8 and z > ctx.size / 2 - 14)
 end
 
 function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)
@@ -95,13 +101,15 @@ function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)
 end
 
 function Kit.scatter(ctx: Ctx, count: number, margin: number, fn: (CFrame, Random, number) -> ())
-	for i = 1, count do
+	local scale = math.min((ctx.size / DESIGN_SIZE) ^ 2, SCATTER_CAP)
+	for i = 1, math.round(count * scale) do
 		local x, z = Kit.randomPoint(ctx, margin)
 		fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
 	end
 end
 
--- Floor + three solid walls + an entrance wall with a gap facing the hub.
+-- Floor + side walls + an entrance wall with a gap facing the hub. The back wall has a matching
+-- exit gap onto the trail to the next biome, except in the last biome.
 function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 	local s = ctx.size
 	local floor = part(ctx, "Floor", Vector3.new(s, 1, s), ctx.cf * CFrame.new(0, -0.4, 0), color or ctx.pal.Ground,
@@ -109,7 +117,6 @@ function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 	floor:SetAttribute("BiomeFloor", true)
 	local wallColor = ctx.pal.Prop
 	local opts = { Parent = ctx.model }
-	part(ctx, "WallBack", Vector3.new(s, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, s / 2), wallColor, opts)
 	part(ctx, "WallLeft", Vector3.new(2, WALL_H, s), ctx.cf * CFrame.new(-s / 2, WALL_H / 2, 0), wallColor, opts)
 	part(ctx, "WallRight", Vector3.new(2, WALL_H, s), ctx.cf * CFrame.new(s / 2, WALL_H / 2, 0), wallColor, opts)
 	local seg = (s - ENTRANCE_W) / 2
@@ -121,6 +128,19 @@ function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 		ctx.cf * CFrame.new(0, WALL_H + 2, -s / 2), Color3.fromHex("#1E2A22"), opts)
 	Parts.surfaceText(arch, Enum.NormalId.Back, ctx.biome.Name, ctx.pal.Accent1)
 	Parts.surfaceText(arch, Enum.NormalId.Front, ctx.biome.Name, ctx.pal.Accent1)
+	local nextBiome = BiomeData.List[ctx.biome.Index + 1]
+	if ctx.biome.Index >= BiomeData.Count or not nextBiome then
+		part(ctx, "WallBack", Vector3.new(s, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, s / 2), wallColor, opts)
+		return
+	end
+	for _, side in { -1, 1 } do
+		part(ctx, "WallBack", Vector3.new(seg, WALL_H, 2),
+			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, s / 2), wallColor, opts)
+	end
+	local exit = part(ctx, "ExitSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
+		ctx.cf * CFrame.new(0, WALL_H + 2, s / 2), Color3.fromHex("#1E2A22"), opts)
+	Parts.surfaceText(exit, Enum.NormalId.Back, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
+	Parts.surfaceText(exit, Enum.NormalId.Front, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
 end
 
 -- Props -------------------------------------------------------------------------------------
@@ -242,6 +262,10 @@ local function digSpotModel(ctx: Ctx, id: string, cf: CFrame, tier: number, pare
 	local tough = tier > 1
 	local base = if tough then Color3.fromRGB(96, 96, 104) else Color3.fromRGB(120, 84, 52)
 	local opts = { Parent = m }
+	part(ctx, "DirtRim", Vector3.new(0.2, 7.8, 7.8), cf * CFrame.new(0, 0.15, 0) * UPRIGHT, Color3.fromHex("#5C3B24"),
+		{ Parent = m, Shape = CYL, CanCollide = false })
+	part(ctx, "DirtCircle", Vector3.new(0.2, 7, 7), cf * CFrame.new(0, 0.2, 0) * UPRIGHT, Color3.fromHex("#784F31"),
+		{ Parent = m, Shape = CYL, CanCollide = false })
 	if style == "Rock" or tough then
 		part(ctx, "Body", Vector3.new(5, 2.4, 4.4), cf * CFrame.new(0, 1, 0) * CFrame.Angles(0, 0.4, 0.08), base, opts)
 		part(ctx, "Crack", Vector3.new(0.4, 2.6, 3.2), cf * CFrame.new(0, 1.2, 0) * CFrame.Angles(0, 0.4, 0), ctx.pal.Accent1,
@@ -299,11 +323,23 @@ function Kit.skeleton(ctx: Ctx): Skeleton
 	for i = 1, B.DigSpots do
 		local tough = i > B.DigSpots - B.ToughSpots
 		-- Tough spots sit deeper in the biome, near the guardian's beat.
-		local x, z = Kit.randomPoint(ctx, 16)
-		if tough then
-			z = math.abs(z) * 0.6 + s * 0.15
+		local cf = Kit.at(ctx, 0, 0)
+		for _ = 1, 30 do
+			local x, z = Kit.randomPoint(ctx, 16)
+			if tough then
+				z = math.abs(z) * 0.6 + s * 0.15
+			end
+			cf = Kit.at(ctx, x, z)
+			local ok = Kit.isClear(ctx, x, z, 16)
+			for _, other in spots do
+				if ok and (other.cf.Position - cf.Position).Magnitude < SPOT_GAP then
+					ok = false
+				end
+			end
+			if ok then
+				break
+			end
 		end
-		local cf = Kit.at(ctx, x, z)
 		local tier = if tough then ctx.biome.ToughTier else 1
 		local id = `{ctx.biome.Id}_{i}`
 		table.insert(spots, { id = id, cf = cf, requiredTier = tier, model = digSpotModel(ctx, id, cf, tier, spotFolder) })

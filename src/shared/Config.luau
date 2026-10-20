@@ -48,11 +48,11 @@ local Config = {
 	-- Biomes sit in one line in front of the plot row. Walk +Z to the next one.
 	Biome = {
 		RingRadius = 0,
-		Size = 56,
+		Size = 112,
 		Gap = 12,
 		FrontGap = 28, -- studs from the plot row's front edge to biome 1
 		SafeRadius = 10,
-		DigSpots = 8,
+		DigSpots = 10,
 		ToughSpots = 3,
 		EnforceSeconds = 0.5,
 		PathWidth = 8,
