@@ -100,7 +100,7 @@ local function tick()
 		local hum, root = humanoidOf(player)
 		if refs and session and hum and root and hum.Health > 0 and onBelt(refs.belt, root.Position) then
 			local d = session.data
-			local gain = TreadmillData.speedPerSec(d.treadmillLevel) * TreadmillData.multiplierFor(d.trails.equipped)
+			local gain = TreadmillData.gain(d.treadmillLevel, d.trails.equipped, d.speedBonus)
 			Data.update(player, function(p)
 				p.speed += gain
 			end, true)
