@@ -92,6 +92,7 @@ function Plots.refresh(player: Player)
 	PlotBuilder.setLanes(refs, session.data.lanesUnlocked)
 	PlotBuilder.setHouseTier(refs, session.data.houseTier)
 	PlotBuilder.setWater(refs, session.data.water)
+	PlotBuilder.setTreadmill(refs, session.data.treadmillLevel)
 end
 
 local function teleportHome(player: Player, character: Model)
@@ -173,6 +174,7 @@ local function release(player: Player)
 	PlotBuilder.setLanes(refs, Config.Start.LanesUnlocked)
 	PlotBuilder.setHouseTier(refs, 1)
 	PlotBuilder.setWater(refs, { channel = false, sprinkler = false, pond = false })
+	PlotBuilder.setTreadmill(refs, 1)
 end
 
 function Plots.start(worldFolder: Instance)

@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Lanes = require(ReplicatedStorage.Shared.Lanes)
 local Format = require(ReplicatedStorage.Shared.Format)
+local Treadmill = require(ReplicatedStorage.Shared.Treadmill)
+local Products = require(ReplicatedStorage.Shared.Products)
 local Parts = require(script.Parent.Parent.Parts)
 local House = require(script.Parent.House)
 
@@ -19,6 +21,18 @@ local SOIL_LOCKED = Color3.fromRGB(70, 66, 64)
 local GRASS = Color3.fromRGB(92, 200, 80)
 local PATH = Color3.fromRGB(176, 150, 110)
 local PRIMARY = Color3.fromHex("#3FBF4A")
+local NAVY = Color3.fromHex("#2B2F5E")
+local CYAN = Color3.fromHex("#3FD0FF")
+local BELT = Color3.fromHex("#1E6FFF")
+local BELT_GRID = Color3.fromHex("#1046B8")
+local SIGN_NAVY = Color3.fromHex("#1C1F4A")
+local ROBUX = Color3.fromHex("#D63BFF")
+
+-- Treadmill footprint (plot local). In front of the house on the walkway side: clear of the
+-- largest house (front edge Z = -19), the garden border (Z >= -22) and the spawn (Z = -40).
+local TM_X, TM_Z = P.HouseX, -27
+local TM_LEN, TM_W = 14, 8
+local SIGN_X = TM_X + TM_LEN / 2 + 4.5
 
 export type PlotRefs = {
 	index: number,
@@ -33,6 +47,12 @@ export type PlotRefs = {
 	spawn: CFrame,
 	machines: { [string]: Model },
 	water: Folder,
+	treadmill: Model,
+	belt: BasePart,
+	treadmillSign: BasePart,
+	treadmillLevelLabel: TextLabel,
+	treadmillMoneyLabel: TextLabel,
+	treadmillRobuxLabel: TextLabel,
 }
 
 local PlotBuilder = {}
@@ -98,6 +118,151 @@ local function buildLaneLock(refs: PlotRefs, lane: number)
 	refs.laneLocks[lane] = m
 end
 
+local function signLabel(parent: Instance, name: string, text: string, pos: UDim2, size: UDim2, font: Enum.Font): TextLabel
+	local l = Instance.new("TextLabel")
+	l.Name = name
+	l.BackgroundTransparency = 1
+	l.Position = pos
+	l.Size = size
+	l.Font = font
+	l.TextScaled = true
+	l.TextColor3 = Color3.new(1, 1, 1)
+	l.TextStrokeTransparency = 0
+	l.Text = text
+	l.Parent = parent
+	return l
+end
+
+local function signButton(parent: Instance, name: string, color: Color3, pos: UDim2, size: UDim2): TextLabel
+	local f = Instance.new("Frame")
+	f.Name = name
+	f.BackgroundColor3 = color
+	f.BorderSizePixel = 0
+	f.Position = pos
+	f.Size = size
+	f.Parent = parent
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.15, 0)
+	corner.Parent = f
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 4
+	stroke.Color = Color3.fromRGB(20, 20, 40)
+	stroke.Parent = f
+	return signLabel(f, "Text", "", UDim2.fromScale(0.08, 0.12), UDim2.fromScale(0.84, 0.76), Enum.Font.FredokaOne)
+end
+
+local function treadmillPrompt(board: BasePart, name: string, action: string, key: Enum.KeyCode)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = name
+	prompt.ActionText = action
+	prompt.ObjectText = "Treadmill"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 12
+	prompt.RequiresLineOfSight = false
+	prompt.KeyboardKeyCode = key
+	prompt.Parent = board
+end
+
+-- Belt along X with the console at the -X end, so the runner faces away from the garden.
+local function buildTreadmill(refs: PlotRefs)
+	local cf = refs.cframe * CFrame.new(TM_X, 0, TM_Z)
+	local m = Parts.model("Treadmill", refs.model)
+	refs.treadmill = m
+	local half = TM_LEN / 2
+	Parts.make({
+		Name = "Frame", Parent = m, Color = NAVY,
+		Size = Vector3.new(TM_LEN, 0.8, TM_W), CFrame = cf * CFrame.new(0, 0.4, 0),
+	})
+	for _, z in { -1, 1 } do
+		Parts.make({
+			Name = "TrimSide", Parent = m, Color = CYAN, Material = Enum.Material.Neon, CanCollide = false,
+			Size = Vector3.new(TM_LEN, 0.25, 0.4), CFrame = cf * CFrame.new(0, 0.9, z * (TM_W / 2 - 0.2)),
+		})
+		Parts.make({
+			Name = "TrimEnd", Parent = m, Color = CYAN, Material = Enum.Material.Neon, CanCollide = false,
+			Size = Vector3.new(0.4, 0.25, TM_W - 0.8), CFrame = cf * CFrame.new(z * (half - 0.2), 0.9, 0),
+		})
+	end
+	local beltLen, beltW = TM_LEN - 2.4, TM_W - 2
+	local beltX = 1
+	local belt = Parts.make({
+		Name = "Belt", Parent = m, Color = BELT, Material = Enum.Material.Neon,
+		Size = Vector3.new(beltLen, 0.3, beltW), CFrame = cf * CFrame.new(beltX, 0.95, 0),
+	})
+	refs.belt = belt
+	for i = 1, 5 do
+		Parts.make({
+			Name = "GridX", Parent = m, Color = BELT_GRID, CanCollide = false,
+			Size = Vector3.new(0.15, 0.06, beltW), CFrame = cf * CFrame.new(beltX - beltLen / 2 + i * beltLen / 6, 1.12, 0),
+		})
+	end
+	for _, z in { -beltW / 6, beltW / 6 } do
+		Parts.make({
+			Name = "GridZ", Parent = m, Color = BELT_GRID, CanCollide = false,
+			Size = Vector3.new(beltLen, 0.06, 0.15), CFrame = cf * CFrame.new(beltX, 1.12, z),
+		})
+	end
+	for _, z in { -1, 1 } do
+		local rz = z * (TM_W / 2 - 0.5)
+		for _, x in { -half + 2.2, half - 2.5 } do
+			Parts.make({
+				Name = "RailPost", Parent = m, Color = NAVY,
+				Size = Vector3.new(0.5, 3, 0.5), CFrame = cf * CFrame.new(x, 2.3, rz),
+			})
+		end
+		Parts.make({
+			Name = "Rail", Parent = m, Color = CYAN,
+			Size = Vector3.new(TM_LEN - 4.2, 0.45, 0.6), CFrame = cf * CFrame.new(-0.15, 3.9, rz),
+		})
+	end
+	for _, z in { -1, 1 } do
+		Parts.make({
+			Name = "ConsolePost", Parent = m, Color = NAVY,
+			Size = Vector3.new(0.8, 4, 0.8), CFrame = cf * CFrame.new(-half + 0.8, 2.8, z * (TM_W / 2 - 0.6)),
+		})
+	end
+	Parts.make({
+		Name = "Console", Parent = m, Color = NAVY,
+		Size = Vector3.new(2, 0.7, TM_W), CFrame = cf * CFrame.new(-half + 1, 5.1, 0),
+	})
+	Parts.make({
+		Name = "Screen", Parent = m, Color = CYAN, Material = Enum.Material.Neon, CanCollide = false,
+		Size = Vector3.new(1.4, 0.1, TM_W - 2), CFrame = cf * CFrame.new(-half + 1, 5.5, 0),
+	})
+
+	local scf = refs.cframe * CFrame.new(SIGN_X, 0, TM_Z)
+	Parts.make({
+		Name = "SignPost", Parent = m, Color = NAVY,
+		Size = Vector3.new(0.6, 4, 0.6), CFrame = scf * CFrame.new(0, 2, 0.4),
+	})
+	Parts.make({
+		Name = "SignEdge", Parent = m, Color = CYAN, Material = Enum.Material.Neon,
+		Size = Vector3.new(7.4, 4.6, 0.3), CFrame = scf * CFrame.new(0, 5.6, 0.3),
+	})
+	local board = Parts.make({
+		Name = "SignBoard", Parent = m, Color = SIGN_NAVY,
+		Size = Vector3.new(7, 4.2, 0.4), CFrame = scf * CFrame.new(0, 5.6, 0),
+	})
+	board:SetAttribute("PlotIndex", refs.index)
+	refs.treadmillSign = board
+	-- Front faces the walkway (-Z), like the lane signs.
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "UpgradeSign"
+	gui.Face = Enum.NormalId.Front
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+	gui.PixelsPerStud = 50
+	gui.LightInfluence = 0
+	gui.Parent = board
+	signLabel(gui, "Title", "Upgrade Treadmill", UDim2.fromScale(0.05, 0.04), UDim2.fromScale(0.9, 0.26), Enum.Font.FredokaOne)
+	refs.treadmillLevelLabel = signLabel(gui, "Level", "", UDim2.fromScale(0.1, 0.32), UDim2.fromScale(0.8, 0.24), Enum.Font.FredokaOne)
+	refs.treadmillMoneyLabel = signButton(gui, "Money", Color3.fromRGB(205, 205, 210), UDim2.fromScale(0.05, 0.62), UDim2.fromScale(0.52, 0.3))
+	refs.treadmillRobuxLabel = signButton(gui, "Robux", ROBUX, UDim2.fromScale(0.62, 0.62), UDim2.fromScale(0.33, 0.3))
+	refs.treadmillMoneyLabel.TextColor3 = Color3.fromRGB(30, 30, 40)
+	refs.treadmillMoneyLabel.TextStrokeTransparency = 1
+	treadmillPrompt(board, "TreadmillMoneyPrompt", "Upgrade ($)", Enum.KeyCode.E)
+	treadmillPrompt(board, "TreadmillRobuxPrompt", "Upgrade (R$)", Enum.KeyCode.R)
+end
+
 function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRefs
 	local model = Parts.model(`Plot_{index}`, parent)
 	model:SetAttribute("PlotIndex", index)
@@ -137,6 +302,12 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		spawn = cf * CFrame.new(P.HouseX, 4, -40),
 		machines = {},
 		water = nil :: any,
+		treadmill = nil :: any,
+		belt = nil :: any,
+		treadmillSign = nil :: any,
+		treadmillLevelLabel = nil :: any,
+		treadmillMoneyLabel = nil :: any,
+		treadmillRobuxLabel = nil :: any,
 	}
 
 	local tileFolder = Instance.new("Folder")
@@ -232,6 +403,9 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	water.Parent = model
 	refs.water = water
 
+	buildTreadmill(refs)
+	PlotBuilder.setTreadmill(refs, 1)
+
 	return refs
 end
 
@@ -262,6 +436,24 @@ function PlotBuilder.setHouseTier(refs: PlotRefs, tier: number)
 		refs.house:Destroy()
 	end
 	refs.house = House.build(tier, refs.houseBase, refs.model)
+end
+
+-- Sign text for the owner's level (level 1 when the plot is free).
+function PlotBuilder.setTreadmill(refs: PlotRefs, level: number)
+	if refs.treadmill:GetAttribute("Level") == level then
+		return
+	end
+	refs.treadmill:SetAttribute("Level", level)
+	local cost = Treadmill.nextCost(level)
+	refs.treadmillLevelLabel.Text = if cost then `Lv. {level} > Lv. {level + 1}` else `Lv. {level}`
+	refs.treadmillMoneyLabel.Text = if cost then `${Format.short(cost)}` else "MAX"
+	refs.treadmillRobuxLabel.Text = if cost then `R$ {Products.ByKey.TreadmillLevel.PriceRobux}` else "MAX"
+	for _, name in { "TreadmillMoneyPrompt", "TreadmillRobuxPrompt" } do
+		local prompt = refs.treadmillSign:FindFirstChild(name)
+		if prompt and prompt:IsA("ProximityPrompt") then
+			prompt.ObjectText = if cost then `Lv. {level + 1}` else "MAX"
+		end
+	end
 end
 
 -- Water upgrades sit behind lane 1 (the +Z edge), outside the tile grid, so lanes, tiles and
