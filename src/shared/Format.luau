@@ -30,6 +30,11 @@ function Format.short(n: number): string
 	return sign .. s
 end
 
+-- Speed only: "10K", "1 QA". The two-letter suffix reads badly glued to the number.
+function Format.speed(n: number): string
+	return (Format.short(n):gsub("QA$", " QA"))
+end
+
 function Format.clock(seconds: number): string
 	seconds = math.max(0, math.floor(seconds))
 	return string.format("%d:%02d", seconds // 60, seconds % 60)
