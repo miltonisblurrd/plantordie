@@ -233,7 +233,16 @@ local function onAssigned(player: Player)
 
 	local earned, seconds = Economy.offlineEarnings(d.planted, d.lastSeen, now, growthMult(d))
 	local grantStarter = not d.starterGranted
+	local held = 0
+	for _, n in d.seeds do
+		held += n
+	end
+	-- Rescue only a truly empty profile so nobody is stuck with nothing to plant.
+	local grantRescue = not grantStarter and held <= 0 and next(d.planted) == nil and next(d.plants) == nil
 	Data.update(player, function(p)
+		if grantRescue then
+			p.seeds.Sunpetal = (p.seeds.Sunpetal or 0) + 1
+		end
 		if earned > 0 then
 			p.money += earned
 			p.stats.moneyEarned += earned
@@ -250,6 +259,8 @@ local function onAssigned(player: Player)
 
 	if grantStarter then
 		Net.notify(player, "Welcome! You got a starter seed pack. Open Seeds and tap a soil tile to plant.")
+	elseif grantRescue then
+		Net.notify(player, "Here's a starter seed to get you going! Open Seeds and plant it.")
 	end
 	if earned > 0 then
 		local hours = seconds / 3600
