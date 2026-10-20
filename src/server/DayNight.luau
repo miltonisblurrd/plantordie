@@ -65,6 +65,12 @@ local function enter(newPhase: Phase)
 	end
 	startedAt = workspace:GetServerTimeNow()
 	endsAt = startedAt + (if phase == "Day" then D.DaySeconds else D.NightSeconds)
+	-- Mirrored so a client that missed the remote still has the phase. DayEndsAt goes last:
+	-- clients re-read all four when it changes.
+	ReplicatedStorage:SetAttribute("DayPhase", phase)
+	ReplicatedStorage:SetAttribute("DayDuration", if phase == "Day" then D.DaySeconds else D.NightSeconds)
+	ReplicatedStorage:SetAttribute("DayNightNumber", night)
+	ReplicatedStorage:SetAttribute("DayEndsAt", endsAt)
 	broadcast()
 end
 

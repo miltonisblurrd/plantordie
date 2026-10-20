@@ -13,6 +13,7 @@ local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
 local Biomes = require(script.Parent.Biomes)
+local DayNight = require(script.Parent.DayNight)
 
 local Sync = {}
 
@@ -152,6 +153,7 @@ function Sync.start()
 	end)
 	Net.on("RequestState", {}, function(player)
 		Sync.push(player)
+		DayNight.sendTo(player)
 	end)
 
 	task.spawn(function()

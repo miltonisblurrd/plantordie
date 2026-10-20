@@ -112,13 +112,29 @@ function State.start()
 			task.spawn(cb, snap)
 		end
 	end)
-	dayNight.OnClientEvent:Connect(function(phase: string, endsAt: number, duration: number, night: number)
+	local function setDayNight(phase: string, endsAt: number, duration: number, night: number)
+		local cur = State.dayNight
+		if cur and cur.phase == phase and cur.endsAt == endsAt and cur.night == night then
+			return
+		end
 		local info = { phase = phase, endsAt = endsAt, duration = duration, night = night }
 		State.dayNight = info
 		for _, cb in dayNightListeners do
 			task.spawn(cb, info)
 		end
-	end)
+	end
+	local function fromAttributes()
+		local phase = ReplicatedStorage:GetAttribute("DayPhase")
+		local endsAt = ReplicatedStorage:GetAttribute("DayEndsAt")
+		if type(phase) == "string" and type(endsAt) == "number" then
+			local duration = ReplicatedStorage:GetAttribute("DayDuration")
+			local night = ReplicatedStorage:GetAttribute("DayNightNumber")
+			setDayNight(phase, endsAt, if type(duration) == "number" then duration else 0, if type(night) == "number" then night else 0)
+		end
+	end
+	dayNight.OnClientEvent:Connect(setDayNight)
+	ReplicatedStorage:GetAttributeChangedSignal("DayEndsAt"):Connect(fromAttributes)
+	fromAttributes()
 	request:FireServer()
 end
 

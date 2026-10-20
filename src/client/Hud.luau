@@ -2,6 +2,7 @@
 -- Main HUD. Renders only what State receives: money, income/sec, area, day/night countdown,
 -- house HP, and an event slot. Layout keeps clear of the Roblox top bar and device safe area.
 
+local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -11,6 +12,13 @@ local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 
 local Hud = {}
+
+local function timeOfDay(clockTime: number): string
+	local minutes = math.floor((clockTime % 24) * 60)
+	local h, m = minutes // 60, minutes % 60
+	local h12 = if h % 12 == 0 then 12 else h % 12
+	return string.format("%d:%02d %s", h12, m, if h < 12 then "AM" else "PM")
+end
 
 local function row(name: string, parent: Instance, order: number, height: number): Frame
 	local f = Instance.new("Frame")
@@ -59,7 +67,7 @@ function Hud.start()
 	local clock = Ui.panel("Clock", UDim2.fromOffset(220, 56), right)
 	clock.LayoutOrder = 1
 	padded(clock, 6)
-	local clockText = Ui.label("Text", "DAY  0:00", true, clock)
+	local clockText = Ui.label("Text", "DAY 0:00", true, clock)
 
 	local area = Ui.panel("Area", UDim2.fromOffset(220, 44), right)
 	area.LayoutOrder = 2
@@ -147,11 +155,12 @@ function Hud.start()
 		acc = 0
 		local dn = State.dayNight
 		if dn then
-			local left = dn.endsAt - workspace:GetServerTimeNow()
+			local left = math.max(0, dn.endsAt - workspace:GetServerTimeNow())
 			local isNight = dn.phase == "Night"
+			local tod = timeOfDay(Lighting.ClockTime)
 			clockText.Text = if isNight
-				then `NIGHT {dn.night}  {Format.clock(left)}`
-				else `DAY  {Format.clock(left)}`
+				then `NIGHT {dn.night}  {Format.clock(left)} · {tod}`
+				else `DAY {Format.clock(left)} · {tod}`
 			clockText.TextColor3 = if isNight then Color3.fromRGB(170, 160, 255) else Color3.fromRGB(255, 230, 120)
 		end
 		local snap = State.snapshot
