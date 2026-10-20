@@ -251,20 +251,32 @@ local gates = delta(function()
 	for _, b in Biomes.List do Gate.build(b, Layout.gateCFrame(b.Index), world) end
 end)
 print(("15 gates: %d"):format(gates))
-local biomeTotal, trailTotal = 0, 0
+local biomeTotal, trailTotal, spotTotal, minGap = 0, 0, 0, math.huge
 for _, b in Biomes.List do
 	local skeletonParts, spots
 	local n = delta(function()
 		local ctx = Kit.newCtx(b, Layout.biomeCFrame(b.Index), world)
 		require(Server.World.Builders.Biomes[b.Id])(ctx)
-		skeletonParts = delta(function() spots = #Kit.skeleton(ctx).spots end)
+		skeletonParts = delta(function()
+			local list = Kit.skeleton(ctx).spots
+			spots = #list
+			for i = 1, #list do
+				for j = i + 1, #list do
+					local gap = (list[i].cf.Position - list[j].cf.Position).Magnitude
+					minGap = math.min(minGap, gap)
+					assert(gap >= 8, ("%s spots %d and %d only %.1f studs apart"):format(b.Id, i, j, gap))
+				end
+			end
+		end)
 	end)
+	spotTotal += spots
 	local g = delta(function() GuardianRig.build(Guardians.ByBiome[b.Id], CFrame.new(0, 0, 0), world) end)
 	biomeTotal += n + g
 	print(("  %-17s %4d parts (terrain+props %d, skeleton %d, %d dig spots), guardian %d"):format(b.Id, n + g, n - skeletonParts, skeletonParts, spots, g))
 end
 trailTotal = (#Layout.biomePath(1) - 1) * #Biomes.List
 print(("15 biomes incl. guardians: %d"):format(biomeTotal))
+print(("Dig spots: %d (closest pair in any biome %.1f studs, need >= 8)"):format(spotTotal, minGap))
 print(("Trails: %d segments"):format(trailTotal))
 print(("World total at boot: ~%d parts (+ planted plant models at runtime)"):format(Parts.count() + trailTotal))
 print(("Halloween decor (only while the event is active): %d"):format(delta(function()
