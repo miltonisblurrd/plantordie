@@ -1,8 +1,10 @@
 --!strict
--- Treadmill levels and trails. Levels[L].Cost is the price to go from L - 1 to L (level 1 is free).
+-- Treadmill levels. Levels[L].Cost is the price to go from L - 1 to L (level 1 is free).
+-- Trail multipliers live in Shared.Trails.
+
+local Trails = require(script.Parent.Trails)
 
 export type Level = { Level: number, SpeedPerSec: number, Cost: number }
-export type Trail = { Id: string, Name: string, Multiplier: number }
 
 local MAX_LEVEL = 30
 
@@ -15,14 +17,9 @@ for l = 1, MAX_LEVEL do
 	}
 end
 
-local trails: { [string]: Trail } = {
-	Starter = { Id = "Starter", Name = "Starter Trail", Multiplier = 1 },
-}
-
 local Treadmill = {
 	Levels = levels,
 	MaxLevel = MAX_LEVEL,
-	Trails = trails,
 }
 
 function Treadmill.speedPerSec(level: number): number
@@ -37,7 +34,7 @@ function Treadmill.nextCost(level: number): number?
 end
 
 function Treadmill.multiplierFor(equippedId: string?): number
-	local t = equippedId and trails[equippedId]
+	local t = equippedId and Trails.ById[equippedId]
 	return if t then t.Multiplier else 1
 end
 

@@ -5,7 +5,7 @@ local Config = {
 	Data = {
 		StoreName = "PlantOrDie_Profiles_v2",
 		KeyPrefix = "player_",
-		SchemaVersion = 7,
+		SchemaVersion = 8,
 		AutosaveSeconds = 60,
 		LockStaleSeconds = 30 * 60,
 		Retries = 3,
@@ -65,6 +65,14 @@ local Config = {
 		Range = 12, -- studs from character to spot
 		RespawnSeconds = 45,
 		MaxLuck = 0.5,
+	},
+
+	-- Hub market stalls. Walking onto a stall's circle opens its menu; buying needs BuyRange.
+	Shops = {
+		Trails = Vector3.new(-50, 0, -70),
+		Shovels = Vector3.new(50, 0, -70),
+		Radius = 9,
+		BuyRange = 30,
 	},
 
 	Bank = {

@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Biomes = require(ReplicatedStorage.Shared.Biomes)
+local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 
 export type PlantedTile = {
 	species: string,
@@ -54,7 +55,9 @@ export type Profile = {
 	plants: { [string]: PlantItem }, -- inventory of grown/fused plants by item id
 	nextItemId: number,
 	planted: { [string]: PlantedTile }, -- tile key "lane_col" -> plant
-	shovelTier: number,
+	shovelTier: number, -- mirror of shovels.equipped for older readers
+	-- owned is keyed by tostring(tier): DataStores reject sparse number-keyed maps.
+	shovels: { owned: { [string]: boolean }, equipped: number },
 	portalTier: number,
 	speed: number,
 	treadmillLevel: number,
@@ -115,6 +118,7 @@ function Schema.default(): Profile
 		nextItemId = 1,
 		planted = {},
 		shovelTier = Config.Start.ShovelTier,
+		shovels = { owned = { [tostring(Config.Start.ShovelTier)] = true }, equipped = Config.Start.ShovelTier },
 		portalTier = 1,
 		speed = 0,
 		treadmillLevel = 1,
@@ -220,6 +224,17 @@ local migrations: { [number]: (any) -> any } = {
 		d.version = 7
 		return d
 	end,
+	[7] = function(d)
+		-- v8 owns shovels individually; every tier up to the old one stays owned and equipped.
+		local tier = if type(d.shovelTier) == "number" then math.clamp(math.floor(d.shovelTier), 1, #Upgrades.Shovels) else 1
+		local owned = {}
+		for t = 1, tier do
+			owned[tostring(t)] = true
+		end
+		d.shovels = { owned = owned, equipped = tier }
+		d.version = 8
+		return d
+	end,
 }
 
 -- Returns a migrated, reconciled copy, or nil + reason if the record must not be touched.
@@ -248,6 +263,16 @@ function Schema.migrate(old: any): (Profile?, string?)
 	if type(data.trails.equipped) ~= "string" or not data.trails.owned[data.trails.equipped] then
 		data.trails.equipped = "Starter"
 	end
+	if type(data.shovels) ~= "table" then
+		data.shovels = { owned = { ["1"] = true }, equipped = 1 }
+	elseif type(data.shovels.owned) ~= "table" then
+		data.shovels.owned = { ["1"] = true }
+	end
+	local eq = data.shovels.equipped
+	if type(eq) ~= "number" or not Upgrades.Shovels[eq] or not data.shovels.owned[tostring(eq)] then
+		data.shovels.equipped = 1
+	end
+	data.shovelTier = data.shovels.equipped
 	return data :: Profile, nil
 end
 
