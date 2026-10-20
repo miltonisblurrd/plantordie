@@ -21,7 +21,7 @@ export type Snapshot = {
 	areaBiome: string, -- biome id, "" outside biomes
 	shovelTier: number, -- equipped shovel
 	shovels: { owned: { [string]: boolean }, equipped: number }, -- owned keyed by tostring(tier)
-	bag: { [string]: number }, -- unbanked expedition seeds
+	carrying: { species: string, name: string, rarity: string, origin: string }?, -- the one carried seed
 	defense: DefenseInfo?,
 	event: EventInfo?,
 	water: { channel: boolean, sprinkler: boolean, pond: boolean },

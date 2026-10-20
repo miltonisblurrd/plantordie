@@ -142,7 +142,7 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 	Debris:AddItem(anchor, 2)
 
 	if order >= 5 then
-		Notifications.show(`{rarityId} find! {if def then def.Name else species} is in your bag. Bank it before a guardian catches you!`, "warn")
+		Notifications.show(`{rarityId} find! {if def then def.Name else species} dropped! Pick it up and run it home. Its guardian will chase you!`, "warn")
 	end
 end
 
