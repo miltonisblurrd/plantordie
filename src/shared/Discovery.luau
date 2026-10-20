@@ -1,8 +1,8 @@
 --!strict
--- What the collection index shows as discovered: the saved `collection` set plus everything the
--- player holds right now (seeds, the unbanked bag, inventory plants, planted plants). Keys are
--- "species|variant". Deriving it means older profiles and every grant path count without each
--- path having to remember to write `collection`.
+-- Discoveries. `collection` ("species|variant" -> true) is permanent: every server grant path
+-- calls `record`, entries are never removed, and the index and its rewards read only it.
+-- `of` derives the set from current holdings; `fold` merges that into `collection` for records
+-- saved before every path recorded.
 
 local Discovery = {}
 
@@ -40,6 +40,38 @@ function Discovery.of(d: ProfileLike): { [string]: boolean }
 		end
 	end
 	return out
+end
+
+function Discovery.record(p: { collection: { [string]: boolean } }, species: string, variant: string?)
+	p.collection[species .. "|" .. (variant or "Normal")] = true
+end
+
+-- Tolerates missing or malformed maps (raw pre-reconcile records).
+function Discovery.fold(d: { [string]: any })
+	if type(d.collection) ~= "table" then
+		d.collection = {}
+	end
+	local function tbl(v: any): { [any]: any }
+		return if type(v) == "table" then v else {}
+	end
+	local held: { [string]: any } = { collection = {}, seeds = {}, expedition = {}, plants = {}, planted = {} }
+	for _, field in { "seeds", "expedition" } do
+		for k, n in tbl(d[field]) do
+			if type(k) == "string" and type(n) == "number" then
+				held[field][k] = n
+			end
+		end
+	end
+	for _, field in { "plants", "planted" } do
+		for k, item in tbl(d[field]) do
+			if type(item) == "table" and type(item.species) == "string" then
+				held[field][k] = { species = item.species, variant = if type(item.variant) == "string" then item.variant else "Normal" }
+			end
+		end
+	end
+	for k in Discovery.of(held :: any) do
+		d.collection[k] = true
+	end
 end
 
 -- Highest variant discovered for a species, or nil if none.

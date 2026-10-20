@@ -6,6 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
 local Biomes = require(ReplicatedStorage.Shared.Biomes)
+local Discovery = require(ReplicatedStorage.Shared.Discovery)
+local IndexRewards = require(ReplicatedStorage.Shared.IndexRewards)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 
 export type PlantedTile = {
@@ -66,7 +68,11 @@ export type Profile = {
 	expedition: { [string]: number },
 	water: { channel: boolean, sprinkler: boolean, pond: boolean },
 	fusion: { Neon: FusionSlot, Mega: FusionSlot },
-	collection: { [string]: boolean }, -- "species|variant" discovered
+	-- Rebirth-exempt (survive any future rebirth): collection, indexClaimed, batSkins, speedBonus.
+	collection: { [string]: boolean }, -- "species|variant" discovered; permanent, never removed
+	indexClaimed: { [string]: boolean }, -- biome id -> index reward claimed
+	batSkins: { owned: { [string]: boolean }, equipped: string }, -- IndexRewards.Skins ids
+	speedBonus: number, -- treadmill gain x (1 + speedBonus); +0.10 per claimed biome index
 	event: {
 		currency: { [string]: number },
 		inventory: { [string]: number },
@@ -126,6 +132,9 @@ function Schema.default(): Profile
 		water = { channel = false, sprinkler = false, pond = false },
 		fusion = { Neon = idleSlot(), Mega = idleSlot() },
 		collection = {},
+		indexClaimed = {},
+		batSkins = { owned = { [IndexRewards.DefaultSkin] = true }, equipped = IndexRewards.DefaultSkin },
+		speedBonus = 0,
 		event = { currency = {}, inventory = {}, quests = {}, questsDone = {} },
 		credits = {},
 		purchaseIntent = {},
@@ -250,6 +259,21 @@ local migrations: { [number]: (any) -> any } = {
 		d.version = 9
 		return d
 	end,
+	[9] = function(d)
+		-- v10 makes discoveries permanent (held ones folded in) and adds index rewards.
+		Discovery.fold(d)
+		if type(d.indexClaimed) ~= "table" then
+			d.indexClaimed = {}
+		end
+		if type(d.batSkins) ~= "table" or type(d.batSkins.owned) ~= "table" then
+			d.batSkins = nil
+		end
+		if type(d.speedBonus) ~= "number" then
+			d.speedBonus = 0
+		end
+		d.version = 10
+		return d
+	end,
 }
 
 -- Returns a migrated, reconciled copy, or nil + reason if the record must not be touched.
@@ -288,6 +312,10 @@ function Schema.migrate(old: any): (Profile?, string?)
 		data.shovels.equipped = 1
 	end
 	data.shovelTier = data.shovels.equipped
+	-- reconcile recursed into the non-empty owned map, which only ever adds the default skin.
+	if type(data.batSkins.equipped) ~= "string" or not data.batSkins.owned[data.batSkins.equipped] then
+		data.batSkins.equipped = IndexRewards.DefaultSkin
+	end
 	return data :: Profile, nil
 end
 
