@@ -100,14 +100,14 @@ local Config = {
 
 	-- Player-vs-player bat. Only ever moves the victim's one carried seed.
 	Bat = {
-		Cooldown = 1.2,
+		Cooldown = 0,
 		Range = 7, -- root to root
 		ConeDot = 0.3, -- attacker LookVector . flat direction to victim must exceed this
-		KnockH = 45,
-		KnockUp = 25,
-		StunSeconds = 0.8,
+		KnockH = 110,
+		KnockUp = 55,
+		StunSeconds = 1.5,
 		StealWindow = 3, -- seconds the attacker may also pick up the knocked-loose seed
-		MaxVel = 70,
+		MaxVel = 140,
 	},
 
 	Guardian = {
@@ -181,10 +181,10 @@ local Config = {
 		HouseHitMultiplier = 3, -- a zombie reaching the house hits once for Damage x this, then leaves
 		LaneSpawnJitter = 4, -- studs of random extra spawn distance so zombies don't stack
 		-- Wave size per unlocked lane, so players with fewer lanes face the same density.
-		PerLaneBase = 1.5,
+		PerLaneBase = 3,
 		PerLaneGrowth = 0.25, -- per night
 		PerLaneNightCap = 12, -- nights after which growth stops
-		WaveCap = 40,
+		WaveCap = 180,
 		-- Stat scaling by the player's highest unlocked biome (k) and night number (n).
 		HpPerBiome = 0.6, -- x(1 + 0.6(k-1)), matching plant damage scaling
 		DamagePerBiome = 0.5,

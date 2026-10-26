@@ -7,6 +7,7 @@
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Format = require(ReplicatedStorage.Shared.Format)
@@ -120,7 +121,60 @@ local function promptMoney()
 	)
 end
 
+local RUN_ID = "rbxassetid://507767714"
+local runTrack: AnimationTrack? = nil
+local running = false
+
+local function setRunning(on: boolean)
+	if on == running then
+		return
+	end
+	running = on
+	local hum = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	local animator = hum and hum:FindFirstChildOfClass("Animator")
+	if not animator or not hum then
+		running = false
+		return
+	end
+	if on then
+		local anim = Instance.new("Animation")
+		anim.AnimationId = RUN_ID
+		runTrack = animator:LoadAnimation(anim)
+		runTrack.Priority = Enum.AnimationPriority.Action
+		runTrack.Looped = true
+		runTrack:Play(0.05)
+	elseif runTrack then
+		runTrack:Stop(0.15)
+		runTrack = nil
+	end
+end
+
 function Treadmill.start()
+	local gui = Ui.screen("TreadmillUpgrade", Players.LocalPlayer:WaitForChild("PlayerGui"), 6)
+	local upgradeBtn = Ui.button("Upgrade", "Upgrade treadmill", gui)
+	upgradeBtn.AnchorPoint = Vector2.new(0.5, 1)
+	upgradeBtn.Position = UDim2.new(0.5, 0, 1, -96)
+	upgradeBtn.Size = UDim2.fromOffset(220, 44)
+	upgradeBtn.Visible = false
+	upgradeBtn.Activated:Connect(promptMoney)
+
+	RunService.Heartbeat:Connect(function()
+		local belt = ownBelt()
+		local root = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		local on = false
+		if belt and root and root:IsA("BasePart") then
+			local rel = belt.CFrame:PointToObjectSpace(root.Position)
+			local half = belt.Size / 2
+			on = math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and rel.Y >= half.Y - 1 and rel.Y <= half.Y + 6
+		end
+		upgradeBtn.Visible = on
+		setRunning(on)
+	end)
+	Players.LocalPlayer.CharacterAdded:Connect(function()
+		running = false
+		runTrack = nil
+	end)
+
 	State.remote("SpeedGain").OnClientEvent:Connect(function(amount: number, beltPosition: Vector3, total: number?)
 		if type(total) == "number" then
 			State.setSpeed(total)

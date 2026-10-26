@@ -1063,8 +1063,8 @@ do
 	local BiomeRegions = require(Shared.BiomeRegions)
 	local W = Config.World
 	local R = Config.Bat
-	assert(R.Cooldown == 1.2 and R.Range == 7 and R.ConeDot == 0.3 and R.KnockH == 45 and R.KnockUp == 25
-		and R.StunSeconds == 0.8 and R.StealWindow == 3 and R.MaxVel == 70)
+	assert(R.Cooldown == 0 and R.Range == 7 and R.ConeDot == 0.3 and R.KnockH == 110 and R.KnockUp == 55
+		and R.StunSeconds == 1.5 and R.StealWindow == 3 and R.MaxVel == 140)
 	local fwd = Vector3.new(0, 0, -1)
 	local function atk(over) local a = { pos = Vector3.zero, look = fwd, alive = true, safe = false, lastSwing = -math.huge }
 		for k, v in over or {} do a[k] = v end return a end
@@ -1079,8 +1079,7 @@ do
 	refused(atk(), { tgt("v", Vector3.new(0, 0, -7.5)) }, "range")
 	refused(atk(), { tgt("v", Vector3.new(5, 0, 0)) }, "cone")
 	refused(atk(), { tgt("v", Vector3.new(0, 0, 5)) }, "cone")
-	refused(atk({ lastSwing = 9 }), { inFront }, "cooldown")
-	assert(BCore.pick(atk({ lastSwing = 10 - R.Cooldown - 0.01 }), { inFront }, 10, R) == inFront, "cooldown elapsed")
+	assert(BCore.pick(atk({ lastSwing = 10 }), { inFront }, 10, R) == inFront, "no cooldown between swings")
 	refused(atk({ safe = true }), { inFront }, "safe")
 	refused(atk(), { tgt("v", Vector3.new(0, 0, -5), { safe = true }) }, "target safe")
 	refused(atk(), { tgt("v", Vector3.new(0, 0, -5), { los = false }) }, "los")
@@ -1353,8 +1352,10 @@ end
 
 print("\n-- Fairness: wave size by lanes, stats by biome --")
 for _, lanes in { 3, 5, 7 } do
-	print(("  %d lanes: night 1 %d, night 5 %d, night 12+ %d zombies (%.1f per lane at night 12)"):format(lanes,
-		Zombies.waveSize(1, lanes), Zombies.waveSize(5, lanes), Zombies.waveSize(12, lanes), Zombies.waveSize(12, lanes) / lanes))
+	local spark, myth = Upgrades.portalOf(1).Spawn, Upgrades.portalOf(5).Spawn
+	assert(myth > Upgrades.portalOf(4).Spawn and Upgrades.portalOf(4).Spawn > Upgrades.portalOf(3).Spawn, "each portal sends more")
+	print(("  %d lanes: night 1 %d, night 12+ %d; myth portal night 12 %d"):format(lanes,
+		Zombies.waveSize(1, lanes, spark), Zombies.waveSize(12, lanes, spark), Zombies.waveSize(12, lanes, myth)))
 end
 for _, k in { 1, 5, 10, 15 } do
 	local w = Zombies.stats("Walker", k, 1)

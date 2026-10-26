@@ -32,13 +32,14 @@ local function updateLabels()
 				local label = info and info:FindFirstChild("Label") :: TextLabel?
 				if label then
 					local stage = (m:GetAttribute("Stage") :: number?) or 1
+					local rate = `+{Format.money((m:GetAttribute("Income") :: number?) or 0)}/s`
 					if stage >= 4 then
-						label.Text = `+{Format.money((m:GetAttribute("Income") :: number?) or 0)}/s`
+						label.Text = rate
 						label.TextColor3 = GROWN
 					else
 						local planted = (m:GetAttribute("PlantedAt") :: number?) or now
 						local total = (m:GetAttribute("GrowSeconds") :: number?) or 1
-						label.Text = `{Economy.STAGES[stage]} {Format.clock(planted + total - now)}`
+						label.Text = `{Economy.STAGES[stage]} {Format.clock(planted + total - now)}\n{rate}`
 						label.TextColor3 = Color3.new(1, 1, 1)
 					end
 				end
@@ -48,6 +49,35 @@ local function updateLabels()
 end
 
 local function watchPlantFolder(plot: Instance, folder: Instance)
+	folder.ChildRemoved:Connect(function(m)
+		if not m:IsA("Model") then
+			return
+		end
+		local root = m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart")
+		if not root then
+			return
+		end
+		local at = root.Position
+		Sfx.play("Dig")
+		local puff = Instance.new("Part")
+		puff.Anchored = true
+		puff.CanCollide = false
+		puff.CanQuery = false
+		puff.Transparency = 1
+		puff.Size = Vector3.one
+		puff.Position = at
+		puff.Parent = workspace
+		local dirt = Instance.new("ParticleEmitter")
+		dirt.Color = ColorSequence.new(Color3.fromRGB(120, 84, 52))
+		dirt.Size = NumberSequence.new(0.6, 0)
+		dirt.Speed = NumberRange.new(6, 12)
+		dirt.Lifetime = NumberRange.new(0.3, 0.6)
+		dirt.SpreadAngle = Vector2.new(40, 40)
+		dirt.Rate = 0
+		dirt.Parent = puff
+		dirt:Emit(18)
+		game:GetService("Debris"):AddItem(puff, 1)
+	end)
 	folder.ChildAdded:Connect(function(m)
 		if not m:IsA("Model") then
 			return

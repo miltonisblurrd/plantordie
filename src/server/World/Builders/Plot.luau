@@ -157,7 +157,8 @@ local function treadmillPrompt(board: BasePart, name: string, action: string, ke
 	prompt.ActionText = action
 	prompt.ObjectText = "Treadmill"
 	prompt.HoldDuration = 0
-	prompt.MaxActivationDistance = 12
+	prompt.MaxActivationDistance = 22
+	prompt.ClickablePrompt = true
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = key
 	prompt.Parent = board

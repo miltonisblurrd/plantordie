@@ -392,7 +392,7 @@ local function startWave(player: Player, night: number)
 		return
 	end
 	local biome = Biomes.highestUnlocked(session.data)
-	local queue = Zombies.compose(night, biome, session.data.lanesUnlocked, rng)
+	local queue = Zombies.compose(night, biome, session.data.lanesUnlocked, rng, Upgrades.portalOf(session.data.portalTier).Spawn)
 	st.field.houseX = houseX(session.data.houseTier)
 	st.field.trapPower = scaleOf(biome)
 	local boss = night % Zombies.BossEveryNights == 0

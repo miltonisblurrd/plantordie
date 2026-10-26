@@ -104,20 +104,21 @@ function Zombies.stats(id: string, biomeIndex: number, night: number): Stats
 	}
 end
 
-function Zombies.waveSize(night: number, lanes: number): number
+function Zombies.waveSize(night: number, lanes: number, spawn: number?): number
 	local perLane = D.PerLaneBase + D.PerLaneGrowth * (math.min(night, D.PerLaneNightCap) - 1)
-	return math.min(D.WaveCap, math.ceil(lanes * perLane))
+	return math.min(D.WaveCap, math.ceil(lanes * perLane * (spawn or 1)))
 end
 
 -- Spawn order of type ids for one player's wave. Every 5th night adds the boss mid-wave.
-function Zombies.compose(night: number, biomeIndex: number, lanes: number, rng: Random): { string }
+-- `spawn` is the portal tier's spawn multiplier; each upgrade sends more monsters than the last.
+function Zombies.compose(night: number, biomeIndex: number, lanes: number, rng: Random, spawn: number?): { string }
 	local pool = Zombies.available(night, biomeIndex)
 	local total = 0
 	for _, z in pool do
 		total += z.Weight
 	end
 	local out = {}
-	for _ = 1, Zombies.waveSize(night, lanes) do
+	for _ = 1, Zombies.waveSize(night, lanes, spawn) do
 		local r = rng:NextNumber() * total
 		local pick = pool[1]
 		for _, z in pool do

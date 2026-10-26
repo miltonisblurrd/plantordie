@@ -53,13 +53,13 @@ local shovels: { Shovel } = {
 }
 
 -- Each plot's portal. Higher tiers raise garden income and the strength of monsters that walk out.
-export type PortalTier = { Tier: number, Name: string, Cost: number, IncomeMultiplier: number, Strength: number }
+export type PortalTier = { Tier: number, Name: string, Cost: number, IncomeMultiplier: number, Strength: number, Spawn: number }
 local portals: { PortalTier } = {
-	{ Tier = 1, Name = "Spark Portal", Cost = 0, IncomeMultiplier = 1, Strength = 1 },
-	{ Tier = 2, Name = "Ember Portal", Cost = 5_000, IncomeMultiplier = 1.35, Strength = 1.25 },
-	{ Tier = 3, Name = "Storm Portal", Cost = 80_000, IncomeMultiplier = 1.8, Strength = 1.6 },
-	{ Tier = 4, Name = "Void Portal", Cost = 2_000_000, IncomeMultiplier = 2.5, Strength = 2.1 },
-	{ Tier = 5, Name = "Myth Portal", Cost = 40_000_000, IncomeMultiplier = 3.5, Strength = 2.8 },
+	{ Tier = 1, Name = "Spark Portal", Cost = 0, IncomeMultiplier = 1, Strength = 1, Spawn = 1 },
+	{ Tier = 2, Name = "Ember Portal", Cost = 5_000, IncomeMultiplier = 1.35, Strength = 1.25, Spawn = 1.6 },
+	{ Tier = 3, Name = "Storm Portal", Cost = 80_000, IncomeMultiplier = 1.8, Strength = 1.6, Spawn = 2.2 },
+	{ Tier = 4, Name = "Void Portal", Cost = 2_000_000, IncomeMultiplier = 2.5, Strength = 2.1, Spawn = 3 },
+	{ Tier = 5, Name = "Myth Portal", Cost = 40_000_000, IncomeMultiplier = 3.5, Strength = 2.8, Spawn = 4 },
 }
 
 local channel: WaterTier = {

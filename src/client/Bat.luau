@@ -34,7 +34,7 @@ end
 
 local function onActivated(tool: Tool)
 	local now = os.clock()
-	if now - lastSwing < Config.Bat.Cooldown then
+	if Config.Bat.Cooldown > 0 and now - lastSwing < Config.Bat.Cooldown then
 		return
 	end
 	lastSwing = now
@@ -87,11 +87,18 @@ local function onHit(position: Vector3, velocity: Vector3?)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local hum = character and character:FindFirstChildOfClass("Humanoid")
-	if hum then
-		hum:ChangeState(Enum.HumanoidStateType.Freefall)
-	end
 	if root and root:IsA("BasePart") then
 		root.AssemblyLinearVelocity = velocity
+	end
+	if hum then
+		hum.PlatformStand = true
+		hum:ChangeState(Enum.HumanoidStateType.Physics)
+		task.delay(Config.Bat.StunSeconds, function()
+			if hum.Parent then
+				hum.PlatformStand = false
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+		end)
 	end
 end
 

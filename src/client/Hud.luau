@@ -42,10 +42,10 @@ end
 function Hud.start()
 	local gui = Ui.screen("Hud", Players.LocalPlayer:WaitForChild("PlayerGui"), 1)
 
-	-- Top-left: money, income and speed. Top-centre belongs to the biome banner.
+	-- Bottom-left: money, income and speed, clear of the house bar. Top-centre belongs to the biome banner.
 	local money = Ui.panel("Money", UDim2.fromOffset(230, 108), gui)
-	money.AnchorPoint = Vector2.new(0, 0)
-	money.Position = UDim2.new(0, 12, 0, 12)
+	money.AnchorPoint = Vector2.new(0, 1)
+	money.Position = UDim2.new(0, 12, 1, -84)
 	padded(money, 8)
 	Ui.list(money, Enum.FillDirection.Vertical, 2)
 	local moneyText = Ui.label("Amount", "$0", true, row("AmountRow", money, 1, 40))
