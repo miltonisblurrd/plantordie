@@ -10,6 +10,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Speed = require(ReplicatedStorage.Shared.Speed)
 local TreadmillData = require(ReplicatedStorage.Shared.Treadmill)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
@@ -100,7 +101,7 @@ local function tick()
 		local hum, root = humanoidOf(player)
 		if refs and session and hum and root and hum.Health > 0 and onBelt(refs.belt, root.Position) then
 			local d = session.data
-			local gain = TreadmillData.gain(d.treadmillLevel, d.trails.equipped, d.speedBonus)
+			local gain = TreadmillData.gain(d.treadmillLevel, d.trails.equipped, d.speedBonus, Boosts.multiplier("Speed", d.speedRobuxTier))
 			Data.update(player, function(p)
 				p.speed += gain
 			end, true)

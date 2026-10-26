@@ -12,6 +12,7 @@ local TweenService = game:GetService("TweenService")
 
 local Format = require(ReplicatedStorage.Shared.Format)
 local TreadmillData = require(ReplicatedStorage.Shared.Treadmill)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 local Settings = require(script.Parent.Settings)
@@ -157,6 +158,19 @@ function Treadmill.start()
 	upgradeBtn.Size = UDim2.fromOffset(220, 44)
 	upgradeBtn.Visible = false
 	upgradeBtn.Activated:Connect(promptMoney)
+	local speedBtn = Ui.button("SpeedRobux", "x1 SPEED", gui)
+	speedBtn.AnchorPoint = Vector2.new(0.5, 1)
+	speedBtn.Position = UDim2.new(0.5, 0, 1, -148)
+	speedBtn.Size = UDim2.fromOffset(260, 52)
+	speedBtn.BackgroundColor3 = Color3.fromRGB(255, 196, 40)
+	speedBtn.Visible = false
+	speedBtn.Activated:Connect(function()
+		local snap = State.snapshot
+		local nextTier = snap and Boosts.next("Speed", snap.speedRobuxTier or 0)
+		if nextTier then
+			Purchases.offer(nextTier.Key)
+		end
+	end)
 
 	RunService.Heartbeat:Connect(function()
 		local belt = ownBelt()
@@ -168,6 +182,12 @@ function Treadmill.start()
 			on = math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and rel.Y >= half.Y - 1 and rel.Y <= half.Y + 6
 		end
 		upgradeBtn.Visible = on
+		local snap = State.snapshot
+		local tier = if snap then snap.speedRobuxTier or 0 else 0
+		local nowMult = Boosts.multiplier("Speed", tier)
+		local nxt = Boosts.next("Speed", tier)
+		speedBtn.Visible = on
+		speedBtn.Text = if nxt then `⚡ x{nowMult} SPEED → x{nxt.Multiplier}\nONLY {nxt.Price} ROBUX` else `⚡ x{nowMult} SPEED  MAX`
 		setRunning(on)
 	end)
 	Players.LocalPlayer.CharacterAdded:Connect(function()

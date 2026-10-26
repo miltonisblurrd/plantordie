@@ -21,6 +21,7 @@ local Format = require(ReplicatedStorage.Shared.Format)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Products = require(ReplicatedStorage.Shared.Products)
 local TreadmillData = require(ReplicatedStorage.Shared.Treadmill)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Core = require(script.Core)
 local Data = require(script.Parent.Data)
 local Event = require(script.Parent.Event)
@@ -68,6 +69,19 @@ local function apply(p: Data.Profile, key: string, arg: string?, bank: boolean):
 			p.treadmillLevel += 1
 			return `Treadmill upgraded to Lv. {p.treadmillLevel}!`
 		end
+	end
+	local boost = Boosts.ByKey[key]
+	if boost then
+		local current = if boost.Track == "Speed" then p.speedRobuxTier else p.luckRobuxTier
+		if current == boost.Tier - 1 then
+			if boost.Track == "Speed" then
+				p.speedRobuxTier = boost.Tier
+			else
+				p.luckRobuxTier = boost.Tier
+			end
+			return `{boost.Track} is now x{boost.Multiplier}.`
+		end
+		return nil
 	end
 	if bank and CREDITABLE[key] then
 		p.credits[key] = (p.credits[key] or 0) + 1

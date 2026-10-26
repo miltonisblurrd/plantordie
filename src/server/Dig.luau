@@ -11,6 +11,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local DropTables = require(ReplicatedStorage.Shared.DropTables)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
 local Carry = require(script.Parent.Carry)
@@ -91,7 +92,8 @@ local function handle(player: Player, spotId: string)
 		return
 	end
 
-	local drop = DropTables.roll(spot.biomeId, shovel.LuckBonus, rng:NextNumber())
+	local luckMult = Boosts.multiplier("Luck", session.data.luckRobuxTier)
+	local drop = DropTables.roll(spot.biomeId, shovel.LuckBonus, rng:NextNumber(), luckMult)
 	if not drop or not Plants.ById[drop.Plant] then
 		return
 	end
@@ -105,7 +107,7 @@ local function handle(player: Player, spotId: string)
 		p.stats.seedsDug += 1
 	end, true)
 	Carry.reveal(player, drop.Plant, drop.Rarity, spot.biomeId, spot.position, spot.model)
-	Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity, shovel.LuckBonus, spot.biomeId)
+	Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity, luckMult, spot.biomeId)
 end
 
 function Dig.start()

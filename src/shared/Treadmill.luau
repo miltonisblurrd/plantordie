@@ -36,8 +36,8 @@ function Treadmill.speedPerSec(level: number): number
 end
 
 -- Speed earned per tick on the belt. speedBonus comes from claimed biome indexes (0.10 each).
-function Treadmill.gain(level: number, trailId: string?, speedBonus: number): number
-	return Treadmill.speedPerSec(level) * Treadmill.multiplierFor(trailId) * (1 + math.max(0, speedBonus))
+function Treadmill.gain(level: number, trailId: string?, speedBonus: number, speedMult: number?): number
+	return Treadmill.speedPerSec(level) * Treadmill.multiplierFor(trailId) * (1 + math.max(0, speedBonus)) * (speedMult or 1)
 end
 
 -- Price of the next level, or nil at max.

@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Economy = require(ReplicatedStorage.Shared.Economy)
 local Treadmill = require(ReplicatedStorage.Shared.Treadmill)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 
 export type Pending = { key: string, arg: string? }
 export type Ledger = { order: { string }, seen: { [string]: boolean }, pending: { [string]: Pending } }
@@ -102,9 +103,16 @@ end
 -- Applies grants left pending by a crash between save and grant. Returns how many.
 -- Products that would do nothing for this profile and must not be granted or banked as a
 -- credit. Returns the player-facing reason, or nil when the purchase may go ahead.
-function Core.refusal(p: { treadmillLevel: number }, key: string): string?
+function Core.refusal(p: { treadmillLevel: number, speedRobuxTier: number?, luckRobuxTier: number? }, key: string): string?
 	if key == "TreadmillLevel" and p.treadmillLevel >= Treadmill.MaxLevel then
 		return "Your treadmill is already at max level."
+	end
+	local boost = Boosts.ByKey[key]
+	if boost then
+		local current = if boost.Track == "Speed" then (p.speedRobuxTier or 0) else (p.luckRobuxTier or 0)
+		if current ~= boost.Tier - 1 then
+			return if current >= Boosts.MaxTier then `Your {boost.Track} upgrade is already maxed.` else `Buy {boost.Track} upgrades in order.`
+		end
 	end
 	return nil
 end

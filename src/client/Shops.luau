@@ -13,6 +13,7 @@ local Houses = require(ReplicatedStorage.Shared.Houses)
 local Lanes = require(ReplicatedStorage.Shared.Lanes)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
+local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 local Notifications = require(script.Parent.Notifications)
@@ -121,7 +122,7 @@ end
 
 function Shops.start(bar: GuiObject)
 	local gui = Ui.screen("Upgrades", Players.LocalPlayer:WaitForChild("PlayerGui"), 4)
-	local p = Ui.panel("Panel", UDim2.fromOffset(340, 400), gui)
+	local p = Ui.panel("Panel", UDim2.fromOffset(340, 470), gui)
 	p.AnchorPoint = Vector2.new(0.5, 1)
 	p.Position = UDim2.new(0.5, 0, 1, -76)
 	p.Visible = false
@@ -158,10 +159,26 @@ function Shops.start(bar: GuiObject)
 	waterBtn.Position = UDim2.fromOffset(12, 290)
 	waterBtn.Activated:Connect(promptWater)
 
+	local luckInfo = Ui.label("LuckInfo", "", false, p)
+	luckInfo.Size = UDim2.new(1, -24, 0, 36)
+	luckInfo.Position = UDim2.fromOffset(12, 342)
+	luckInfo.TextXAlignment = Enum.TextXAlignment.Left
+	local luckBtn = Ui.button("BuyLuck", "Luck upgrade", p)
+	luckBtn.BackgroundColor3 = Color3.fromHex("#3FBF4A")
+	luckBtn.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
+	luckBtn.Position = UDim2.fromOffset(12, 380)
+	luckBtn.Activated:Connect(function()
+		local snap = State.snapshot
+		local nextTier = snap and Boosts.next("Luck", snap.luckRobuxTier or 0)
+		if nextTier then
+			Purchases.offer(nextTier.Key)
+		end
+	end)
+
 	local boostBtn = Ui.button("GrowthBoost", "2x Growth Boost (Robux)", p)
 	boostBtn.BackgroundColor3 = Ui.Warn
 	boostBtn.Size = UDim2.new(1, -24, 0, Ui.MinTouch)
-	boostBtn.Position = UDim2.fromOffset(12, 342)
+	boostBtn.Position = UDim2.fromOffset(12, 428)
 	boostBtn.Activated:Connect(function()
 		Purchases.offer("GrowthBoost")
 	end)
@@ -203,6 +220,16 @@ function Shops.start(bar: GuiObject)
 		end
 		local left = s.growthBoostEndsAt - State.now()
 		boostBtn.Text = if left > 0 then `Boost active {Format.duration(left)} · add 30m` else "2x Growth Boost (Robux)"
+		local luckNow = Boosts.multiplier("Luck", s.luckRobuxTier or 0)
+		local luckNext = Boosts.next("Luck", s.luckRobuxTier or 0)
+		if luckNext then
+			luckInfo.Text = `🍀 x{luckNow} LUCK → x{luckNext.Multiplier}   ONLY {luckNext.Price} ROBUX`
+			luckBtn.Visible = true
+			luckBtn.Text = `Buy x{luckNext.Multiplier} Luck`
+		else
+			luckInfo.Text = `🍀 x{luckNow} LUCK  MAX`
+			luckBtn.Visible = false
+		end
 	end)
 
 	-- Lane-sign prompts: only usable on your own plot.

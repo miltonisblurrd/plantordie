@@ -988,7 +988,7 @@ do
 	local Discovery = require(Shared.Discovery)
 	local TM = require(Shared.Treadmill)
 	local Schema = require(Server.Data.Schema)
-	assert(Config.Data.SchemaVersion == 10)
+	assert(Config.Data.SchemaVersion >= 10)
 	local EXPECT = { "Leafy Bat", "Mushroom Bat", "Cactus Bat", "Lava Bat", "Ice Bat", "Enchanted Bat", "Palm Bat", "Coral Bat",
 		"Autumn Bat", "Cloud Bat", "Crystal Bat", "Toxic Bat", "Ancient Bat", "Galaxy Bat", "Divine Bloom Bat" }
 	local names, prevCash, req = {}, 0, 0
@@ -1041,7 +1041,7 @@ do
 		planted = { ["1_1"] = { species = "Puffcap", rarity = "Common", size = "Medium", variant = "Normal", plantedAt = 0, uid = "1" } },
 		expedition = {} }
 	local m = assert(Schema.migrate(v9))
-	assert(m.version == 10 and m.money == 77)
+	assert(m.version == Config.Data.SchemaVersion and m.money == 77)
 	assert(m.collection["PeaPopper|Neon"] and m.collection["Sunpetal|Normal"] and m.collection["IceRose|Mega"] and m.collection["Puffcap|Normal"], "held discoveries folded")
 	assert(type(m.indexClaimed) == "table" and next(m.indexClaimed) == nil and m.speedBonus == 0)
 	assert(m.batSkins.owned.Wooden and m.batSkins.equipped == "Wooden")

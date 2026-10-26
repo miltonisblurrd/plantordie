@@ -143,6 +143,8 @@ function Sync.push(player: Player)
 		indexClaimed = d.indexClaimed,
 		batSkins = d.batSkins,
 		speedBonus = d.speedBonus,
+		speedRobuxTier = d.speedRobuxTier,
+		luckRobuxTier = d.luckRobuxTier,
 		growthBoostEndsAt = d.growthBoostEndsAt,
 		speed = d.speed,
 		treadmillLevel = d.treadmillLevel,

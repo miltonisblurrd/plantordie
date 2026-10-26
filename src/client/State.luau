@@ -31,6 +31,8 @@ export type Snapshot = {
 	indexClaimed: { [string]: boolean }, -- biome id -> index reward claimed
 	batSkins: { owned: { [string]: boolean }, equipped: string },
 	speedBonus: number,
+	speedRobuxTier: number,
+	luckRobuxTier: number,
 	growthBoostEndsAt: number,
 	persistent: boolean,
 	speed: number,

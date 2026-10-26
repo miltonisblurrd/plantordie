@@ -27,20 +27,25 @@ DropTables.ByBiome = tables
 DropTables.RarityWeight = RARITY_WEIGHT
 
 -- Weights after luck. Rarity order 1 (Common) is untouched; each rarer step gains `luck`.
-function DropTables.weighted(biomeId: string, luck: number): { Drop }
+function DropTables.weighted(biomeId: string, luck: number, luckMult: number?): { Drop }
 	local l = math.clamp(luck, 0, Config.Dig.MaxLuck)
+	local m = if type(luckMult) == "number" then math.max(1, luckMult) else 1
 	local out: { Drop } = {}
 	local base: { Drop } = tables[biomeId] or {}
 	for _, d in base do
 		local order = (Rarities.ById[d.Rarity] and Rarities.ById[d.Rarity].Order) or 1
-		table.insert(out, { Plant = d.Plant, Rarity = d.Rarity, Weight = d.Weight * (1 + l * (order - 1)) })
+		local steps = order - 1
+		table.insert(out, {
+			Plant = d.Plant,
+			Rarity = d.Rarity,
+			Weight = d.Weight * (1 + l * steps) * (1 + (m - 1) * 0.08 * steps),
+		})
 	end
 	return out
 end
 
--- `roll01` is a number in [0, 1) supplied by the caller (server Random).
-function DropTables.roll(biomeId: string, luck: number, roll01: number): Drop?
-	local list = DropTables.weighted(biomeId, luck)
+function DropTables.roll(biomeId: string, luck: number, roll01: number, luckMult: number?): Drop?
+	local list = DropTables.weighted(biomeId, luck, luckMult)
 	local total = 0
 	for _, d in list do
 		total += d.Weight

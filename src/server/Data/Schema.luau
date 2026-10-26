@@ -73,6 +73,8 @@ export type Profile = {
 	indexClaimed: { [string]: boolean }, -- biome id -> index reward claimed
 	batSkins: { owned: { [string]: boolean }, equipped: string }, -- IndexRewards.Skins ids
 	speedBonus: number, -- treadmill gain x (1 + speedBonus); +0.10 per claimed biome index
+	speedRobuxTier: number, -- 0..8; Robux Speed track. 0 means x1.
+	luckRobuxTier: number, -- 0..8; Robux Luck track. 0 means x1.
 	event: {
 		currency: { [string]: number },
 		inventory: { [string]: number },
@@ -135,6 +137,8 @@ function Schema.default(): Profile
 		indexClaimed = {},
 		batSkins = { owned = { [IndexRewards.DefaultSkin] = true }, equipped = IndexRewards.DefaultSkin },
 		speedBonus = 0,
+		speedRobuxTier = 0,
+		luckRobuxTier = 0,
 		event = { currency = {}, inventory = {}, quests = {}, questsDone = {} },
 		credits = {},
 		purchaseIntent = {},
@@ -272,6 +276,12 @@ local migrations: { [number]: (any) -> any } = {
 			d.speedBonus = 0
 		end
 		d.version = 10
+		return d
+	end,
+	[10] = function(d)
+		d.speedRobuxTier = 0
+		d.luckRobuxTier = 0
+		d.version = 11
 		return d
 	end,
 }

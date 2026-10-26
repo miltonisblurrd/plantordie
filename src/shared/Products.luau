@@ -25,6 +25,15 @@ local list: { Product } = {
 	{ Key = "TreadmillLevel", Id = 0, PriceRobux = 499, Benefit = "Upgrade your treadmill by one level." },
 }
 
+local Boosts = require(script.Parent.RobuxBoosts)
+for _, tier in Boosts.Speed do
+	table.insert(list, { Key = tier.Key, Id = 0, PriceRobux = tier.Price, Benefit = tier.Benefit })
+end
+for _, tier in Boosts.Luck do
+	table.insert(list, { Key = tier.Key, Id = 0, PriceRobux = tier.Price, Benefit = tier.Benefit })
+end
+
+
 local byKey: { [string]: Product } = {}
 local byId: { [number]: Product } = {}
 for _, prod in list do
