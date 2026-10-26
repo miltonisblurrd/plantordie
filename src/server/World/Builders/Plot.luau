@@ -289,6 +289,21 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		Name = "FrontPath", Parent = model, Color = PATH,
 		Size = Vector3.new(P.Width - 4, 0.3, 10), CFrame = cf * CFrame.new(0, 0.15, -P.Depth / 2 + 8),
 	})
+	-- Sides and the biome-facing back. The hub side stays open so the path in is clear.
+	local plotWallH = 12
+	local wood = Color3.fromRGB(120, 82, 48)
+	for _, side in { -1, 1 } do
+		Parts.make({
+			Name = "PlotWall", Parent = model, Color = wood, Material = Enum.Material.WoodPlanks,
+			Size = Vector3.new(1.4, plotWallH, P.Depth - 4),
+			CFrame = cf * CFrame.new(side * (P.Width / 2 - 0.8), plotWallH / 2, 2),
+		})
+	end
+	Parts.make({
+		Name = "PlotWallBack", Parent = model, Color = wood, Material = Enum.Material.WoodPlanks,
+		Size = Vector3.new(P.Width - 2, plotWallH, 1.4),
+		CFrame = cf * CFrame.new(0, plotWallH / 2, P.Depth / 2 - 0.8),
+	})
 
 	local refs: PlotRefs = {
 		index = index,

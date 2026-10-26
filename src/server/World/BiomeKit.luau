@@ -12,8 +12,8 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Parts = require(script.Parent.Parts)
 
 local B = Config.Biome
-local WALL_H = 12
-local ENTRANCE_W = 26
+local WALL_H = 26
+local ENTRANCE_W = 52
 local DESIGN_SIZE = 56 -- builders' scatter counts were tuned for this biome size
 local SCATTER_CAP = 2 -- full area scale (4x at 112) blows the boot part budget
 local SPOT_GAP = 8
@@ -22,7 +22,9 @@ local ENTRANCE_CLEAR = 10 -- radius kept free of props and dig spots just inside
 export type Ctx = {
 	biome: BiomeData.Biome,
 	cf: CFrame,
-	size: number,
+	size: number, -- length, kept so older builder calls still read a span
+	width: number,
+	length: number,
 	model: Model,
 	props: Model,
 	rng: Random,
@@ -54,13 +56,9 @@ local NEON = Enum.Material.Neon
 local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinders point along X; this stands them up
 
 function Kit.at(ctx: Ctx, x: number, z: number, yaw: number?): CFrame
-	local limit = ctx.size / 2 - 4
-	local ax, az = math.abs(x), math.abs(z)
-	if ax > limit or az > limit then
-		local s = limit / math.max(ax, az, 1)
-		x *= s
-		z *= s
-	end
+	local limX, limZ = ctx.width / 2 - 4, ctx.length / 2 - 4
+	x = math.clamp(x, -limX, limX)
+	z = math.clamp(z, -limZ, limZ)
 	return ctx.cf * CFrame.new(x, 0, z) * CFrame.Angles(0, yaw or 0, 0)
 end
 
@@ -70,30 +68,34 @@ function Kit.newCtx(biome: BiomeData.Biome, cf: CFrame, parent: Instance): Ctx
 	model:SetAttribute("BiomeIndex", biome.Index)
 	model:SetAttribute("Tint", biome.Palette.Ground:Lerp(Color3.new(1, 1, 1), 0.65))
 	local props = Parts.model("Props", model)
-	return { biome = biome, cf = cf, size = B.Size, model = model, props = props, rng = Random.new(biome.Index * 7919), pal = biome.Palette }
+	return {
+		biome = biome, cf = cf, size = B.Size, width = B.Width, length = B.Size,
+		model = model, props = props, rng = Random.new(biome.Index * 7919), pal = biome.Palette,
+	}
 end
 
 -- Keeps props off the entrance lane, the entrance clearing and the walls.
 function Kit.isClear(ctx: Ctx, x: number, z: number, margin: number): boolean
-	local half = ctx.size / 2 - margin
-	if math.abs(x) > half or math.abs(z) > half then
+	if math.abs(x) > ctx.width / 2 - margin or math.abs(z) > ctx.length / 2 - margin then
 		return false
 	end
-	local clearZ = -ctx.size / 2 + ENTRANCE_CLEAR + 6
+	local clearZ = -ctx.length / 2 + ENTRANCE_CLEAR + 6
 	if (Vector2.new(x, z) - Vector2.new(0, clearZ)).Magnitude < ENTRANCE_CLEAR + 10 then
 		return false
 	end
-	if math.abs(x) < 8 and z < -ctx.size / 2 + 14 then
+	local lane = ENTRANCE_W / 2
+	if math.abs(x) < lane and z < -ctx.length / 2 + 18 then
 		return false
 	end
-	return not (ctx.biome.Index < BiomeData.Count and math.abs(x) < 8 and z > ctx.size / 2 - 14)
+	return not (ctx.biome.Index < BiomeData.Count and math.abs(x) < lane and z > ctx.length / 2 - 18)
 end
 
 function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)
 	for _ = 1, 40 do
-		local x = ctx.rng:NextNumber(-ctx.size / 2, ctx.size / 2)
-		local z = ctx.rng:NextNumber(-ctx.size / 2, ctx.size / 2)
-		if Kit.isClear(ctx, x, z, margin) then
+		local x = ctx.rng:NextNumber(-ctx.width / 2, ctx.width / 2)
+		local z = ctx.rng:NextNumber(-ctx.length / 2, ctx.length / 2)
+		local onEdge = math.abs(x) > ctx.width * 0.28 or math.abs(z) > ctx.length * 0.34
+		if (onEdge or ctx.rng:NextNumber() < 0.12) and Kit.isClear(ctx, x, z, margin) then
 			return x, z
 		end
 	end
@@ -101,7 +103,7 @@ function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)
 end
 
 function Kit.scatter(ctx: Ctx, count: number, margin: number, fn: (CFrame, Random, number) -> ())
-	local scale = math.min((ctx.size / DESIGN_SIZE) ^ 2, SCATTER_CAP)
+	local scale = math.min((ctx.length / DESIGN_SIZE) * (ctx.width / DESIGN_SIZE), SCATTER_CAP)
 	for i = 1, math.round(count * scale) do
 		local x, z = Kit.randomPoint(ctx, margin)
 		fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
@@ -110,35 +112,75 @@ end
 
 -- Floor + side walls + an entrance wall with a gap facing the hub. The back wall has a matching
 -- exit gap onto the trail to the next biome, except in the last biome.
+local function wallLook(id: string, pal: BiomeData.Palette): (Color3, Enum.Material, Color3)
+	if id == "GreenMeadows" then
+		return Color3.fromRGB(122, 86, 52), Enum.Material.Ground, pal.Ground
+	elseif id == "MushroomForest" then
+		return Color3.fromRGB(92, 64, 40), Enum.Material.Ground, Color3.fromRGB(70, 110, 60)
+	elseif id == "CactusCanyon" then
+		return Color3.fromRGB(196, 120, 64), Enum.Material.Sandstone, Color3.fromRGB(214, 150, 80)
+	elseif id == "InfernoJungle" then
+		return Color3.fromRGB(40, 32, 34), Enum.Material.Basalt, Color3.fromRGB(255, 90, 30)
+	elseif id == "FrostbiteGarden" then
+		return Color3.fromRGB(210, 230, 245), Enum.Material.Glacier, Color3.fromRGB(150, 210, 255)
+	elseif id == "EnchantedGrove" then
+		return Color3.fromRGB(90, 110, 80), Enum.Material.Slate, Color3.fromRGB(80, 200, 140)
+	elseif id == "TropicalParadise" then
+		return Color3.fromRGB(150, 100, 60), Enum.Material.Ground, Color3.fromRGB(40, 160, 70)
+	elseif id == "CoralKingdom" then
+		return Color3.fromRGB(180, 140, 130), Enum.Material.Sandstone, Color3.fromRGB(255, 127, 80)
+	elseif id == "AutumnWoods" then
+		return Color3.fromRGB(110, 70, 40), Enum.Material.Ground, Color3.fromRGB(200, 90, 30)
+	elseif id == "SkyIslands" then
+		return Color3.fromRGB(190, 180, 160), Enum.Material.Sandstone, Color3.fromRGB(235, 245, 255)
+	elseif id == "CrystalCaverns" then
+		return Color3.fromRGB(36, 36, 48), Enum.Material.Slate, Color3.fromRGB(92, 225, 230)
+	elseif id == "ToxicSwamp" then
+		return Color3.fromRGB(70, 90, 50), Enum.Material.Mud, Color3.fromRGB(166, 255, 0)
+	elseif id == "AncientWilds" then
+		return Color3.fromRGB(176, 150, 110), Enum.Material.Sandstone, Color3.fromRGB(120, 96, 70)
+	elseif id == "CosmicGarden" then
+		return Color3.fromRGB(40, 20, 70), Enum.Material.Slate, Color3.fromRGB(180, 120, 255)
+	end
+	return Color3.fromRGB(40, 16, 24), Enum.Material.Slate, Color3.fromRGB(255, 80, 140)
+end
+
+local function wall(ctx: Ctx, name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material, cap: Color3)
+	local body = part(ctx, name, size, cf, color, { Parent = ctx.model, Material = material })
+	local capH = 2
+	part(ctx, name .. "Cap", Vector3.new(size.X, capH, size.Z), cf * CFrame.new(0, size.Y / 2 + capH / 2, 0), cap,
+		{ Parent = ctx.model, Material = if cap.R > 0.6 and cap.G < 0.5 then Enum.Material.Neon else Enum.Material.Grass })
+	return body
+end
+
 function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
-	local s = ctx.size
-	local floor = part(ctx, "Floor", Vector3.new(s, 1, s), ctx.cf * CFrame.new(0, -0.4, 0), color or ctx.pal.Ground,
+	local w, len = ctx.width, ctx.length
+	local floor = part(ctx, "Floor", Vector3.new(w, 1, len), ctx.cf * CFrame.new(0, -0.4, 0), color or ctx.pal.Ground,
 		{ Material = material or Enum.Material.Grass, Parent = ctx.model })
 	floor:SetAttribute("BiomeFloor", true)
-	local wallColor = ctx.pal.Prop
-	local opts = { Parent = ctx.model }
-	part(ctx, "WallLeft", Vector3.new(2, WALL_H, s), ctx.cf * CFrame.new(-s / 2, WALL_H / 2, 0), wallColor, opts)
-	part(ctx, "WallRight", Vector3.new(2, WALL_H, s), ctx.cf * CFrame.new(s / 2, WALL_H / 2, 0), wallColor, opts)
-	local seg = (s - ENTRANCE_W) / 2
+	local wallColor, wallMat, cap = wallLook(ctx.biome.Id, ctx.pal)
+	wall(ctx, "WallLeft", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(-w / 2, WALL_H / 2, 0), wallColor, wallMat, cap)
+	wall(ctx, "WallRight", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(w / 2, WALL_H / 2, 0), wallColor, wallMat, cap)
+	local seg = (w - ENTRANCE_W) / 2
 	for _, side in { -1, 1 } do
-		part(ctx, "WallFront", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, -s / 2), wallColor, opts)
+		wall(ctx, "WallFront", Vector3.new(seg, WALL_H, 2),
+			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, -len / 2), wallColor, wallMat, cap)
 	end
 	local arch = part(ctx, "EntranceSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
-		ctx.cf * CFrame.new(0, WALL_H + 2, -s / 2), Color3.fromHex("#1E2A22"), opts)
+		ctx.cf * CFrame.new(0, WALL_H + 4, -len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })
 	Parts.surfaceText(arch, Enum.NormalId.Back, ctx.biome.Name, ctx.pal.Accent1)
 	Parts.surfaceText(arch, Enum.NormalId.Front, ctx.biome.Name, ctx.pal.Accent1)
 	local nextBiome = BiomeData.List[ctx.biome.Index + 1]
 	if ctx.biome.Index >= BiomeData.Count or not nextBiome then
-		part(ctx, "WallBack", Vector3.new(s, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, s / 2), wallColor, opts)
+		wall(ctx, "WallBack", Vector3.new(w, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, len / 2), wallColor, wallMat, cap)
 		return
 	end
 	for _, side in { -1, 1 } do
-		part(ctx, "WallBack", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, s / 2), wallColor, opts)
+		wall(ctx, "WallBack", Vector3.new(seg, WALL_H, 2),
+			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, len / 2), wallColor, wallMat, cap)
 	end
 	local exit = part(ctx, "ExitSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
-		ctx.cf * CFrame.new(0, WALL_H + 2, s / 2), Color3.fromHex("#1E2A22"), opts)
+		ctx.cf * CFrame.new(0, WALL_H + 4, len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })
 	Parts.surfaceText(exit, Enum.NormalId.Back, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
 	Parts.surfaceText(exit, Enum.NormalId.Front, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
 end

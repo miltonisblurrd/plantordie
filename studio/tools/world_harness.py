@@ -796,8 +796,8 @@ do
 	local function refRegion(pos)
 		for _, b in Biomes.List do
 			local lp = pos - Vector3.new(0, W.GroundY, refCenterZ(b.Index))
-			local half = B.Size / 2 + 1
-			if math.abs(lp.X) <= half and math.abs(lp.Z) <= half and lp.Y > -20 and lp.Y < 120 then return b.Id end
+			local halfX, halfZ = B.Width / 2 + 1, B.Size / 2 + 1
+			if math.abs(lp.X) <= halfX and math.abs(lp.Z) <= halfZ and lp.Y > -20 and lp.Y < 120 then return b.Id end
 		end
 		return nil
 	end
@@ -817,17 +817,18 @@ do
 	for _, b in Biomes.List do
 		local cz = refCenterZ(b.Index)
 		assert(Layout.biomeCenterZ(b.Index) == cz and Layout.biomeCFrame(b.Index).Position.Z == cz)
-		for _, dz in { -58, -57.5, -57, -56.5, -56, -30, 0, 30, 56, 56.5, 57, 57.5, 58 } do
-			for _, dx in { -58, -57, -56, 0, 56, 57, 58 } do
+		local hx, hz = B.Width / 2 + 1, B.Size / 2 + 1
+		for _, dz in { -hz, -hz + 0.5, -hz + 1, -hz + 2, -30, 0, 30, hz - 2, hz - 1, hz - 0.5, hz } do
+			for _, dx in { -hx, -hx + 1, -hx + 2, 0, hx - 2, hx - 1, hx } do
 				for _, dy in { -21, -19, 0, 3, 119, 121 } do
 					check(Vector3.new(dx, W.GroundY + dy, cz + dz))
 				end
 			end
 		end
 		local p = Vector3.new(0, W.GroundY + 3, cz)
-		assert(math.abs(BiomeRegions.distanceInside(b.Id, p) - math.min(B.Size / 2 + 1, 3 + 20)) < 1e-6, "Y band is an edge")
-		assert(math.abs(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, 56.5)) - 0.5) < 1e-6, "hysteresis band")
-		assert(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, 58)) < 0)
+		assert(math.abs(BiomeRegions.distanceInside(b.Id, p) - math.min(B.Width / 2 + 1, B.Size / 2 + 1, 3 + 20)) < 1e-6, "Y band is an edge")
+		assert(math.abs(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, hz - 0.5)) - 0.5) < 1e-6, "hysteresis band")
+		assert(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, hz + 1)) < 0)
 		if b.Index > 1 then
 			check(Vector3.new(0, W.GroundY + 3, cz - B.Size / 2 - B.Gap / 2), true) -- trail gap
 		end

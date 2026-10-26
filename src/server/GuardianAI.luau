@@ -96,8 +96,9 @@ end
 -- Keeps a patrolling guardian inside its biome walls. Chase and return moves skip it.
 local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
 	local lp = info.cf:PointToObjectSpace(pos)
-	local half = Config.Biome.Size / 2 - 4
-	local clamped = Vector3.new(math.clamp(lp.X, -half, half), 0, math.clamp(lp.Z, -half, half))
+	local halfX = Config.Biome.Width / 2 - 4
+	local halfZ = Config.Biome.Size / 2 - 4
+	local clamped = Vector3.new(math.clamp(lp.X, -halfX, halfX), 0, math.clamp(lp.Z, -halfZ, halfZ))
 	local world = info.cf:PointToWorldSpace(clamped)
 	return Vector3.new(world.X, groundY(), world.Z)
 end

@@ -48,13 +48,14 @@ local Config = {
 	-- Biomes sit in one line in front of the plot row. Walk +Z to the next one.
 	Biome = {
 		RingRadius = 0,
-		Size = 112,
-		Gap = 12,
+		Size = 220, -- length along the progression, Z
+		Width = 156, -- across the zone, X. Longer than it is wide.
+		Gap = 18,
 		FrontGap = 28, -- studs from the plot row's front edge to biome 1
 		DigSpots = 10,
 		ToughSpots = 3,
 		EnforceSeconds = 0.5,
-		PathWidth = 8,
+		PathWidth = 40,
 		-- Dirt HP = Index * this. Tough mounds use the tough multiplier. With each biome's expected
 		-- shovel a normal mound takes 3-8 swings (harness progression sim).
 		DirtHpPerIndex = 10,
