@@ -78,10 +78,16 @@ local function handle(player: Player, spotId: string)
 	if (lastDig[player] or 0) + shovel.DigSeconds > now then
 		return
 	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character, spot.model }
+	if workspace:Raycast(root.Position, spot.position - root.Position, params) then
+		return
+	end
 	lastDig[player] = now
 	spot.hp -= shovel.Damage
+	spot.model:SetAttribute("DigHp", spot.hp)
 	if spot.hp > 0 then
-		Net.notify(player, `Dirt {math.ceil(spot.hp)}/{spot.maxHp}. A stronger shovel breaks it faster.`, "warn")
 		return
 	end
 
@@ -99,7 +105,7 @@ local function handle(player: Player, spotId: string)
 		p.stats.seedsDug += 1
 	end, true)
 	Carry.reveal(player, drop.Plant, drop.Rarity, spot.biomeId, spot.position, spot.model)
-	Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity)
+	Net.fire("DigResult", player, spot.position, drop.Plant, drop.Rarity, shovel.LuckBonus, spot.biomeId)
 end
 
 function Dig.start()

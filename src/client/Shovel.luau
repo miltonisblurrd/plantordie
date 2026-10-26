@@ -6,8 +6,10 @@
 local Debris = game:GetService("Debris")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
+local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Plants = require(ReplicatedStorage.Shared.Plants)
 local Rarities = require(ReplicatedStorage.Shared.Rarities)
@@ -15,11 +17,13 @@ local Upgrades = require(ReplicatedStorage.Shared.Upgrades)
 local State = require(script.Parent.State)
 local Notifications = require(script.Parent.Notifications)
 local Sfx = require(script.Parent.Sfx)
+local Ui = require(script.Parent.Ui)
 
 local Shovel = {}
 
 local player = Players.LocalPlayer
 local lastSwing = 0
+local auto = false
 
 local function nearestSpot(root: BasePart): Model?
 	local world = workspace:FindFirstChild("World")
@@ -56,11 +60,11 @@ local function swing(tool: Tool)
 	down:Play()
 end
 
-local function onActivated(tool: Tool)
+local function onActivated(tool: Tool, quiet: boolean?)
 	local snap = State.snapshot
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not snap or not root then
+	if not snap or not root or character:FindFirstChild("Shovel") ~= tool then
 		return
 	end
 	local shovel = Upgrades.Shovels[snap.shovelTier] or Upgrades.Shovels[1]
@@ -70,7 +74,9 @@ local function onActivated(tool: Tool)
 	end
 	local spot = nearestSpot(root)
 	if not spot then
-		Notifications.show("No dig spot in reach. Find a mound or glowing marker in a biome.", "info", 2)
+		if not quiet then
+			Notifications.show("No dig spot in reach. Find a mound or glowing marker in a biome.", "info", 2)
+		end
 		return
 	end
 	local required = spot:GetAttribute("RequiredTier") :: number? or 1
@@ -90,10 +96,13 @@ local function hookTool(inst: Instance)
 		inst.Activated:Connect(function()
 			onActivated(inst)
 		end)
+		inst.Unequipped:Connect(function()
+			auto = false
+		end)
 	end
 end
 
-local function discovery(position: Vector3, species: string, rarityId: string)
+local function discovery(position: Vector3, species: string, rarityId: string, luck: number?, biomeId: string?)
 	local def = Plants.ById[species]
 	local rarity = Rarities.ById[rarityId]
 	local color = if rarity then rarity.Color else Color3.new(1, 1, 1)
@@ -117,6 +126,10 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 	burst.Acceleration = Vector3.new(0, -20, 0)
 	burst.Rate = 0
 	burst.Parent = anchor
+	local biome = if type(biomeId) == "string" then BiomeData.ById[biomeId] else nil
+	if biome then
+		burst.Color = ColorSequence.new(biome.Palette.Accent2, color)
+	end
 	local order = if rarity then rarity.Order else 1
 	burst:Emit(16 + order * 8)
 
@@ -134,6 +147,18 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 	label.TextStrokeTransparency = 0.2
 	label.Text = `+1 {if def then def.Name else species} ({rarityId})`
 	label.Parent = gui
+	local luckLabel = Instance.new("TextLabel")
+	luckLabel.BackgroundTransparency = 1
+	luckLabel.AnchorPoint = Vector2.new(0.5, 1)
+	luckLabel.Position = UDim2.new(0.5, 0, 0, -2)
+	luckLabel.Size = UDim2.fromOffset(160, 28)
+	luckLabel.Font = Enum.Font.GothamBold
+	luckLabel.TextScaled = true
+	luckLabel.TextColor3 = Color3.fromHex("#3FBF4A")
+	luckLabel.TextStrokeTransparency = 0.2
+	local shown = if type(luck) == "number" then luck else 0
+	luckLabel.Text = `🍀 x{string.format("%.2f", 1 + shown)}`
+	luckLabel.Parent = gui
 	TweenService:Create(gui, TweenInfo.new(1.6), { StudsOffset = Vector3.new(0, 7, 0) }):Play()
 	TweenService:Create(label, TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 		{ TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
@@ -147,6 +172,38 @@ local function discovery(position: Vector3, species: string, rarityId: string)
 end
 
 function Shovel.start()
+	local gui = Ui.screen("AutoDig", player:WaitForChild("PlayerGui"), 8)
+	local button = Ui.button("AutoDig", "AUTO DIG", gui)
+	button.AnchorPoint = Vector2.new(0.5, 1)
+	button.Position = UDim2.new(0.5, 0, 1, -150)
+	button.Size = UDim2.fromOffset(280, 64)
+	button.BackgroundColor3 = Color3.fromHex("#3FBF4A")
+	button.TextSize = 28
+	button.Visible = false
+	button.Activated:Connect(function()
+		if player.Character and player.Character:FindFirstChild("Shovel") then
+			auto = not auto
+			button.BackgroundColor3 = if auto then Color3.fromHex("#1E7A32") else Color3.fromHex("#3FBF4A")
+			button.Text = if auto then "AUTO DIG  ON" else "AUTO DIG"
+		end
+	end)
+
+	RunService.Heartbeat:Connect(function()
+		local character = player.Character
+		local tool = character and character:FindFirstChild("Shovel")
+		local holding = tool ~= nil and tool:IsA("Tool")
+		button.Visible = holding
+		if not holding then
+			auto = false
+			button.Text = "AUTO DIG"
+			button.BackgroundColor3 = Color3.fromHex("#3FBF4A")
+			return
+		end
+		if auto then
+			onActivated(tool :: Tool, true)
+		end
+	end)
+
 	local function watch(container: Instance)
 		for _, c in container:GetChildren() do
 			hookTool(c)
