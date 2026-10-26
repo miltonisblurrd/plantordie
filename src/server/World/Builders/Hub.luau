@@ -5,6 +5,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local SafeZone = require(ReplicatedStorage.Shared.SafeZone)
 local Parts = require(script.Parent.Parent.Parts)
 local Layout = require(script.Parent.Parent.Layout)
 local Machine = require(script.Parent.Machine)
@@ -132,6 +133,23 @@ function Hub.build(parent: Instance): Model
 		Size = Vector3.new(14, 0.3, 36),
 		CFrame = CFrame.new(0, W.GroundY + 0.05, -36),
 	})
+
+	-- The shared Safe Zone boundary: one line across the full home entrance, one sign at the trail.
+	local minX, maxX, _, maxZ = SafeZone.bounds()
+	local line = Parts.make({
+		Name = "SafeZoneLine", Parent = m, Color = Color3.fromHex("#3FBF4A"), Material = Enum.Material.Neon,
+		CanCollide = false, Transparency = 0.6,
+		Size = Vector3.new(maxX - minX, 0.2, 1.2), CFrame = CFrame.new((minX + maxX) / 2, W.GroundY + 0.12, maxZ),
+	})
+	line.CanQuery = false
+	line.CanTouch = false
+	line.CastShadow = false
+	local sign = Parts.make({
+		Name = "SafeZoneSign", Parent = m, Color = Color3.fromHex("#1E2A22"),
+		Size = Vector3.new(10, 2.4, 0.4), CFrame = CFrame.new(Config.Biome.PathWidth / 2 + 7, W.GroundY + 4, maxZ),
+	})
+	Parts.surfaceText(sign, Enum.NormalId.Back, "SAFE ZONE", Color3.fromHex("#3FBF4A"))
+	Parts.surfaceText(sign, Enum.NormalId.Front, "SAFE ZONE", Color3.fromHex("#3FBF4A"))
 
 	-- One Neon maker and one Mega maker for the whole server.
 	local Shared = require(script.Parent.Parent.SharedMachines)

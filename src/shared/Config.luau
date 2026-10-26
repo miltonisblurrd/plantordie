@@ -51,7 +51,6 @@ local Config = {
 		Size = 112,
 		Gap = 12,
 		FrontGap = 28, -- studs from the plot row's front edge to biome 1
-		SafeRadius = 10,
 		DigSpots = 10,
 		ToughSpots = 3,
 		EnforceSeconds = 0.5,
@@ -77,8 +76,16 @@ local Config = {
 	},
 
 	Bank = {
-		HubRadius = 26, -- hub safe area around the fountain; guardians give up a chase here
 		CheckSeconds = 0.5,
+	},
+
+	-- The one shared Safe Zone: a box over the hub and every plot. Biomes are never safe.
+	SafeZone = {
+		SideMargin = 12, -- studs past the outermost plot walls
+		BackMargin = 12, -- studs behind the hub plaza
+		FrontInset = 14, -- boundary line, studs in front of the plot row (biome 1 starts at FrontGap)
+		CheckSeconds = 0.1,
+		Clearance = 1, -- guardians stop this far outside the boundary
 	},
 
 	-- One carried seed per player. Only your own plot banks it.

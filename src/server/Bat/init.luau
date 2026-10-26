@@ -2,21 +2,18 @@
 -- Bats: a swing knocks back and stuns the nearest player in front of you. If they carry a seed
 -- it drops with the normal countdown and, for Config.Bat.StealWindow seconds, you may grab it
 -- too. Nothing else a player owns can move. Only Players' characters are ever targets, and
--- nobody can hit or be hit inside a safe zone (any plot, the hub, any biome safe circle).
+-- nobody can hit or be hit inside the shared Safe Zone (the hub and every plot).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local BiomeData = require(ReplicatedStorage.Shared.Biomes)
-local BiomeRegions = require(ReplicatedStorage.Shared.BiomeRegions)
 local Config = require(ReplicatedStorage.Shared.Config)
 local IndexRewards = require(ReplicatedStorage.Shared.IndexRewards)
 local Core = require(script.Core)
-local Biomes = require(script.Parent.Biomes)
 local Carry = require(script.Parent.Carry)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
-local Plots = require(script.Parent.Plots)
+local SafeZone = require(script.Parent.SafeZone)
 local Tools = require(script.Parent.Tools)
 local Treadmill = require(script.Parent.Treadmill)
 
@@ -38,21 +35,7 @@ local function rootOf(player: Player): (BasePart?, boolean)
 	return nil, false
 end
 
-function Bat.inSafeZone(pos: Vector3): boolean
-	if Plots.plotAt(pos) then
-		return true
-	end
-	local hub = Biomes.HubSpawn.Position
-	if Vector3.new(pos.X - hub.X, 0, pos.Z - hub.Z).Magnitude <= Config.Bank.HubRadius then
-		return true
-	end
-	for _, b in BiomeData.List do
-		if BiomeRegions.inSafeZone(b.Id, pos) then
-			return true
-		end
-	end
-	return false
-end
+Bat.inSafeZone = SafeZone.contains
 
 local function lineOfSight(from: Vector3, to: Vector3): boolean
 	local params = RaycastParams.new()

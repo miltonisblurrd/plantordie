@@ -270,6 +270,9 @@ for _, b in Biomes.List do
 		end)
 	end)
 	spotTotal += spots
+	for _, d in world:GetDescendants() do
+		assert(d.Name ~= "SafeZone" and d.Name ~= "SafeSign", b.Id .. " still builds a biome safe zone part")
+	end
 	local g = delta(function() GuardianRig.build(Guardians.ByBiome[b.Id], CFrame.new(0, 0, 0), world) end)
 	biomeTotal += n + g
 	print(("  %-17s %4d parts (terrain+props %d, skeleton %d, %d dig spots), guardian %d"):format(b.Id, n + g, n - skeletonParts, skeletonParts, spots, g))
@@ -724,7 +727,7 @@ do
 			end
 			if inStall then
 				table.insert(stallParts, d)
-			elseif d.Name ~= "Baseplate" and d.Name ~= "Plaza" and d.Name ~= "PlotPath" then
+			elseif d.Name ~= "Baseplate" and d.Name ~= "Plaza" and d.Name ~= "PlotPath" and d.Name ~= "SafeZoneLine" then
 				table.insert(others, d)
 			end
 		end
@@ -828,10 +831,7 @@ do
 		if b.Index > 1 then
 			check(Vector3.new(0, W.GroundY + 3, cz - B.Size / 2 - B.Gap / 2), true) -- trail gap
 		end
-		local sc = BiomeRegions.safeCenter(b.Id)
-		assert(sc and sc.Z == cz - B.Size / 2 + B.SafeRadius + 6 and sc.X == 0)
-		assert(BiomesSrv.inSafeZone(b.Id, sc + Vector3.new(B.SafeRadius - 0.1, 0, 0)))
-		assert(not BiomesSrv.inSafeZone(b.Id, sc + Vector3.new(B.SafeRadius + 0.1, 0, 0)))
+		assert(BiomeRegions.safeCenter == nil and BiomesSrv.inSafeZone == nil, "no per-biome safe zone API")
 	end
 	check(Vector3.new(0, W.GroundY + 3, -70), true) -- hub spawn
 	check(Vector3.new(0, W.GroundY + 3, Config.Plot.Depth / 2 + 6), true) -- trail to biome 1
@@ -842,6 +842,62 @@ do
 	end
 	print(("  15 biomes: emoji + RecommendedSpeed exact; speed text %s"):format(table.concat(shown, ", ")))
 	print(("  regionOf: server == shared == pre-move math at %d points (%d inside, %d outside); hub, plots, trail gaps -> nil"):format(n, inside, outside))
+end
+
+print("\n-- Shared Safe Zone (one region) --")
+do
+	local SZ = require(Shared.SafeZone)
+	local BiomeRegions = require(Shared.BiomeRegions)
+	local W, P, B = Config.World, Config.Plot, Config.Biome
+	local y = W.GroundY + 3
+	local minX, maxX, minZ, maxZ = SZ.bounds()
+	-- Every plot (inside and on its walls), the hub, the makers, stalls and the plot path are safe.
+	for i = 1, W.PlotCount do
+		local pc = Layout.plotCFrame(i).Position
+		for _, dx in { -P.Width / 2, 0, P.Width / 2 } do
+			for _, dz in { -P.Depth / 2, 0, P.Depth / 2 } do
+				assert(SZ.contains(Vector3.new(pc.X + dx, y, pc.Z + dz)), ("plot %d edge not safe"):format(i))
+			end
+		end
+	end
+	for _, p in { Vector3.new(0, y, -70), Vector3.new(0, y, -70 - W.HubRadius), Config.Shops.Trails + Vector3.new(0, 3, 0),
+		Config.Shops.Shovels + Vector3.new(0, 3, 0), Vector3.new(0, y, -36), Vector3.new(0, y, P.Depth / 2 + 6) } do
+		assert(SZ.contains(p), ("home point %.0f,%.0f not safe"):format(p.X, p.Z))
+	end
+	-- The boundary spans the full home width; one stud past it is dangerous.
+	for _, x in { minX + 0.5, -200, 0, 200, maxX - 0.5 } do
+		assert(SZ.contains(Vector3.new(x, y, maxZ - 0.1)) and not SZ.contains(Vector3.new(x, y, maxZ + 0.1)), "boundary line")
+	end
+	assert(maxZ < P.Depth / 2 + B.FrontGap, "boundary before biome 1")
+	-- No point of any of the 15 biomes is safe.
+	local biomePts = 0
+	for _, b in Biomes.List do
+		local c = BiomeRegions.cframe(b.Index).Position
+		local h = B.Size / 2 + 1
+		for _, dx in { -h, -h / 2, 0, h / 2, h } do
+			for _, dz in { -h, -h / 2, 0, h / 2, h } do
+				assert(not SZ.contains(Vector3.new(c.X + dx, y, c.Z + dz)), b.Id .. " has a safe point")
+				biomePts += 1
+			end
+		end
+	end
+	-- keepOut: a guardian chasing straight at a plot entrance stops at the boundary.
+	local blocked = 0
+	for _, from in { Vector3.new(0, y, maxZ + 10), Vector3.new(-300, y, maxZ + 3), Vector3.new(maxX + 5, y, 0), Vector3.new(0, y, minZ - 4) } do
+		for _, to in { Vector3.new(0, y, 0), Vector3.new(-300, y, 20), Vector3.new(maxX - 2, y, 0), Vector3.new(0, y, -70) } do
+			local p = from
+			for _ = 1, 200 do
+				local d = to - p
+				local step = if d.Magnitude > 2 then d.Unit * 2 else d
+				p = SZ.keepOut(p, p + step)
+				assert(not SZ.contains(p), "guardian stepped inside the Safe Zone")
+			end
+			blocked += 1
+		end
+	end
+	assert(not SZ.contains(SZ.pushOut(Vector3.new(45, 0, 32))), "event patrol point pushed out")
+	print(("  box X %.0f..%.0f Z %.0f..%.0f: 8 plots, hub, stalls, path safe; boundary full width at Z %.0f; %d biome points unsafe; %d keepOut chases never enter"):format(
+		minX, maxX, minZ, maxZ, maxZ, biomePts, blocked))
 end
 
 print("\n== Guardian chase: speed, v9 migration, carry state machine ==")
@@ -1036,7 +1092,8 @@ do
 	assert(k.Magnitude <= R.MaxVel + 1e-6 and k.Y > 0 and k.Z < 0 and math.abs(k.X) < 1e-9, "knock away + up, clamped")
 	local BatSrv = require(Server.Bat)
 	assert(BatSrv.inSafeZone(Vector3.new(0, W.GroundY + 3, -70)), "hub is safe")
-	assert(BatSrv.inSafeZone(BiomeRegions.safeCenter(Biomes.List[1].Id)), "biome safe circle is safe")
+	local entrance = BiomeRegions.cframe(1).Position + Vector3.new(0, 3, -Config.Biome.Size / 2 + 16)
+	assert(not BatSrv.inSafeZone(entrance), "biome 1 entrance is not safe")
 	assert(not BatSrv.inSafeZone(BiomeRegions.cframe(1).Position + Vector3.new(0, 3, 30)), "open biome ground is not safe")
 
 	-- Steal window in Carry.Core.

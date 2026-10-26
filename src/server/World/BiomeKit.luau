@@ -1,7 +1,8 @@
 --!strict
 -- Template helpers for biome builders. A builder only adds terrain and props; the kit builds
--- the shared skeleton (floor, walls with an entrance, safe zone, dig spots, patrol points,
--- danger zones) so every biome plays the same way and stays inside the part budget.
+-- the shared skeleton (floor, walls with an entrance, dig spots, patrol points, danger zones)
+-- so every biome plays the same way and stays inside the part budget. Biomes are never safe;
+-- the only Safe Zone is the shared home area (Shared/SafeZone).
 -- Coordinates are biome-local: X across, Z from entrance (-Size/2) to back (+Size/2).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,6 +17,7 @@ local ENTRANCE_W = 26
 local DESIGN_SIZE = 56 -- builders' scatter counts were tuned for this biome size
 local SCATTER_CAP = 2 -- full area scale (4x at 112) blows the boot part budget
 local SPOT_GAP = 8
+local ENTRANCE_CLEAR = 10 -- radius kept free of props and dig spots just inside the entrance
 
 export type Ctx = {
 	biome: BiomeData.Biome,
@@ -29,8 +31,6 @@ export type Ctx = {
 
 export type DigSpot = { id: string, cf: CFrame, requiredTier: number, model: Model }
 export type Skeleton = {
-	safeCenter: Vector3,
-	safeRadius: number,
 	patrol: { Vector3 },
 	danger: { { center: Vector3, radius: number } },
 	spots: { DigSpot },
@@ -73,14 +73,14 @@ function Kit.newCtx(biome: BiomeData.Biome, cf: CFrame, parent: Instance): Ctx
 	return { biome = biome, cf = cf, size = B.Size, model = model, props = props, rng = Random.new(biome.Index * 7919), pal = biome.Palette }
 end
 
--- Keeps props off the entrance lane, the safe zone and the walls.
+-- Keeps props off the entrance lane, the entrance clearing and the walls.
 function Kit.isClear(ctx: Ctx, x: number, z: number, margin: number): boolean
 	local half = ctx.size / 2 - margin
 	if math.abs(x) > half or math.abs(z) > half then
 		return false
 	end
-	local safeZ = -ctx.size / 2 + B.SafeRadius + 6
-	if (Vector2.new(x, z) - Vector2.new(0, safeZ)).Magnitude < B.SafeRadius + 10 then
+	local clearZ = -ctx.size / 2 + ENTRANCE_CLEAR + 6
+	if (Vector2.new(x, z) - Vector2.new(0, clearZ)).Magnitude < ENTRANCE_CLEAR + 10 then
 		return false
 	end
 	if math.abs(x) < 8 and z < -ctx.size / 2 + 14 then
@@ -298,17 +298,6 @@ end
 
 function Kit.skeleton(ctx: Ctx): Skeleton
 	local s = ctx.size
-	local safeZ = -s / 2 + B.SafeRadius + 6
-	local safeCenter = Kit.at(ctx, 0, safeZ).Position
-	local ring = part(ctx, "SafeZone", Vector3.new(0.2, B.SafeRadius * 2, B.SafeRadius * 2),
-		Kit.at(ctx, 0, safeZ) * CFrame.new(0, 0.15, 0) * UPRIGHT, Color3.fromHex("#3FBF4A"),
-		{ Parent = ctx.model, Shape = CYL, Material = NEON, CanCollide = false, Transparency = 0.6 })
-	ring.CanQuery = false
-	local sign = part(ctx, "SafeSign", Vector3.new(10, 2.4, 0.4), Kit.at(ctx, B.SafeRadius - 2, safeZ - 4) * CFrame.new(0, 4, 0),
-		Color3.fromHex("#1E2A22"), { Parent = ctx.model })
-	Parts.surfaceText(sign, Enum.NormalId.Back, "SAFE ZONE", Color3.fromHex("#3FBF4A"))
-	Parts.surfaceText(sign, Enum.NormalId.Front, "SAFE ZONE", Color3.fromHex("#3FBF4A"))
-
 	local patrol: { Vector3 } = {}
 	local r = s * 0.28
 	for i = 0, 4 do
@@ -356,7 +345,7 @@ function Kit.skeleton(ctx: Ctx): Skeleton
 		zone.CanQuery = false
 	end
 
-	return { safeCenter = safeCenter, safeRadius = B.SafeRadius, patrol = patrol, danger = danger, spots = spots }
+	return { patrol = patrol, danger = danger, spots = spots }
 end
 
 return Kit

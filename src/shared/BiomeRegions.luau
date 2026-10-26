@@ -32,11 +32,8 @@ end
 BiomeRegions.HalfSize = HALF
 
 local cframes: { [string]: CFrame } = {}
-local safeCenters: { [string]: Vector3 } = {}
 for _, b in BiomeData.List do
-	local cf = BiomeRegions.cframe(b.Index)
-	cframes[b.Id] = cf
-	safeCenters[b.Id] = (cf * CFrame.new(0, 0, -B.Size / 2 + B.SafeRadius + 6)).Position
+	cframes[b.Id] = BiomeRegions.cframe(b.Index)
 end
 
 function BiomeRegions.cframeOf(biomeId: string): CFrame?
@@ -69,17 +66,6 @@ function BiomeRegions.regionOf(pos: Vector3): string?
 		end
 	end
 	return nil
-end
-
-function BiomeRegions.safeCenter(biomeId: string): Vector3?
-	return safeCenters[biomeId]
-end
-
-BiomeRegions.SafeRadius = B.SafeRadius
-
-function BiomeRegions.inSafeZone(biomeId: string, pos: Vector3): boolean
-	local c = safeCenters[biomeId]
-	return c ~= nil and Vector2.new(pos.X - c.X, pos.Z - c.Z).Magnitude <= B.SafeRadius
 end
 
 return BiomeRegions

@@ -64,7 +64,6 @@ end
 
 Biomes.regionOf = BiomeRegions.regionOf
 Biomes.inRegion = BiomeRegions.inRegion
-Biomes.inSafeZone = BiomeRegions.inSafeZone
 
 function Biomes.rootOf(player: Player): BasePart?
 	local character = player.Character

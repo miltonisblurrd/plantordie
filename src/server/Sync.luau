@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage.Shared.Config)
 local Houses = require(ReplicatedStorage.Shared.Houses)
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
+local SafeZone = require(ReplicatedStorage.Shared.SafeZone)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
@@ -83,15 +84,12 @@ local function areaFor(player: Player): (string, string)
 		local owner = Plots.ownerOf(idx)
 		return if owner then `{owner.Name}'s Plot` else "Empty Plot", ""
 	end
-	local flat = Vector3.new(pos.X, 0, pos.Z)
-	if flat.Magnitude <= Config.World.GateRingRadius + 20 then
-		return "Hub", ""
+	if SafeZone.contains(pos) then
+		return "Safe Zone", ""
 	end
 	local biomeId = Biomes.regionOf(pos)
 	if biomeId then
-		local b = BiomeData.ById[biomeId]
-		local safe = Biomes.inSafeZone(biomeId, pos)
-		return if safe then `{b.Name} (Safe)` else b.Name, biomeId
+		return BiomeData.ById[biomeId].Name, biomeId
 	end
 	return "Trail", ""
 end

@@ -4,9 +4,11 @@
 --   Chase   -> started only by picking up a seed from this guardian's biome; targets that carrier
 --              alone. PathfindingService path to the target (led by Predict seconds of velocity),
 --              recomputed every RecomputeSeconds off-thread; direct move while no path. May leave
---              the biome. Ends when the carrier banks, drops, reaches the hub safe area, leaves,
---              or after MaxChaseSeconds.
+--              the biome. Ends the moment the carrier enters the shared Safe Zone, or when they
+--              bank, drop, leave, or after MaxChaseSeconds. A carrier who escaped to safety and
+--              comes back into this guardian's biome still holding its seed is chased again.
 --   Return  -> walk back into the biome, then patrol.
+-- No guardian ever moves into the Safe Zone: every step is clamped at its boundary.
 --   Catch   -> knockback + stun, the seed drops where the carrier stood, no catches for
 --              CooldownSeconds. A new chase needs a new pickup.
 -- Chase speed = Speed.guardianSpeedFor(biome RecommendedSpeed). Day/night has no effect.
@@ -28,7 +30,7 @@ local Biomes = require(script.Parent.Biomes)
 local Carry = require(script.Parent.Carry)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
-local Plots = require(script.Parent.Plots)
+local SafeZone = require(script.Parent.SafeZone)
 local Treadmill = require(script.Parent.Treadmill)
 local GuardianRig = require(script.Parent.World.Builders.GuardianRig)
 
@@ -68,6 +70,8 @@ local guardians: { Guardian } = {}
 local eventGuardian: Guardian? = nil
 local eventGuardianId: string? = nil
 local rootFolder: Instance? = nil
+-- Carriers whose chase ended at the Safe Zone, keyed to the guardian zone they escaped from.
+local escaped: { [Player]: string } = {}
 
 local function flat(v: Vector3): Vector3
 	return Vector3.new(v.X, 0, v.Z)
@@ -98,12 +102,10 @@ local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
 	return Vector3.new(world.X, groundY(), world.Z)
 end
 
-local function inHubSafe(pos: Vector3): boolean
-	return flat(pos - Biomes.HubSpawn.Position).Magnitude <= Config.Bank.HubRadius
-end
-
--- Moves toward `goal` at `speed`; returns true once within 1.5 studs.
+-- Moves toward `goal` at `speed`, never into the Safe Zone; returns true once within 1.5 studs
+-- or when the boundary blocks any further progress.
 local function step(g: Guardian, goal: Vector3, speed: number, dt: number, free: boolean): boolean
+	goal = SafeZone.pushOut(goal)
 	local delta = flat(goal - g.pos)
 	local dist = delta.Magnitude
 	if dist < 1.5 then
@@ -111,10 +113,13 @@ local function step(g: Guardian, goal: Vector3, speed: number, dt: number, free:
 	end
 	local dir = delta / dist
 	local nextPos = g.pos + dir * math.min(dist, speed * dt)
-	g.pos = if free then Vector3.new(nextPos.X, groundY(), nextPos.Z) else g.clamp(nextPos)
+	nextPos = if free then Vector3.new(nextPos.X, groundY(), nextPos.Z) else g.clamp(nextPos)
+	nextPos = SafeZone.keepOut(g.pos, nextPos)
+	local moved = flat(nextPos - g.pos).Magnitude
+	g.pos = Vector3.new(nextPos.X, groundY(), nextPos.Z)
 	g.facing = dir
 	place(g)
-	return false
+	return moved < 0.01
 end
 
 local function endChase(g: Guardian, reason: string, knockback: Vector3?)
@@ -123,6 +128,9 @@ local function endChase(g: Guardian, reason: string, knockback: Vector3?)
 	g.waypoints = {}
 	if g.state == "Chase" then
 		g.state = "Return"
+	end
+	if target and reason == "safe" then
+		escaped[target] = g.zone
 	end
 	if target and target.Parent then
 		Net.fire("Chase", target, "end", g.def.Name, reason, knockback)
@@ -133,6 +141,10 @@ local function startChase(g: Guardian, player: Player, now: number): boolean
 	if g.state == "Chase" and g.target ~= player then
 		return false
 	end
+	if SafeZone.isProtected(player) then
+		return false
+	end
+	escaped[player] = nil
 	g.state = "Chase"
 	g.target = player
 	g.chaseStartedAt = now
@@ -148,6 +160,10 @@ local function startChase(g: Guardian, player: Player, now: number): boolean
 end
 
 local function catch(g: Guardian, player: Player, root: BasePart, now: number)
+	if SafeZone.isProtected(player) then
+		endChase(g, "safe")
+		return
+	end
 	local away = flat(root.Position - g.pos)
 	local dir = if away.Magnitude > 0.01 then away.Unit else g.facing
 	local knock = dir * G.KnockbackHorizontal + Vector3.new(0, G.KnockbackUp, 0)
@@ -203,13 +219,8 @@ local function chase(g: Guardian, dt: number, now: number)
 		return
 	end
 	local tpos = root.Position
-	if inHubSafe(tpos) then
+	if SafeZone.contains(tpos) then
 		endChase(g, "safe")
-		return
-	end
-	local plot = Plots.plotAt(tpos)
-	if plot and plot == Plots.plotOf(target) then
-		endChase(g, "bank")
 		return
 	end
 	if now >= g.noCatchUntil and flat(tpos - g.pos).Magnitude <= g.def.CatchRange then
@@ -256,8 +267,31 @@ local function returnHome(g: Guardian, dt: number)
 	end
 end
 
+-- A carrier who escaped to the Safe Zone and walks back into the guardian's own biome with
+-- that biome's seed is a fair target again.
+local function reacquire(now: number)
+	for player, zone in escaped do
+		local item = Carry.carried(player)
+		if not player.Parent or not item or item.origin ~= zone then
+			escaped[player] = nil
+			continue
+		end
+		local root = Biomes.rootOf(player)
+		if not root or SafeZone.contains(root.Position) then
+			continue
+		end
+		for _, g in allGuardians() do
+			if g.zone == zone and g.state ~= "Chase" and g.inRegion(root.Position) then
+				startChase(g, player, now)
+				break
+			end
+		end
+	end
+end
+
 local function tick(dt: number)
 	local now = os.clock()
+	reacquire(now)
 	local positions: { Vector3 } = {}
 	for _, player in Players:GetPlayers() do
 		local root = Biomes.rootOf(player)
@@ -368,7 +402,7 @@ function GuardianAI.setEventGuardian(eventId: string?)
 	local pts = {}
 	for i = 0, 3 do
 		local a = i * math.pi / 2
-		table.insert(pts, c + Vector3.new(math.cos(a) * inner, 0, math.sin(a) * inner))
+		table.insert(pts, SafeZone.pushOut(c + Vector3.new(math.cos(a) * inner, 0, math.sin(a) * inner)))
 	end
 	eventGuardian = spawn(def, folderOf(nil), {
 		zone = eventId, patrolPts = pts,
@@ -425,9 +459,17 @@ function GuardianAI.start(worldFolder: Instance)
 		end
 	end)
 	Carry.onRelease(function(player, _item, reason)
+		escaped[player] = nil
 		for _, g in allGuardians() do
 			if g.target == player and g.state == "Chase" then
 				endChase(g, reason)
+			end
+		end
+	end)
+	SafeZone.onEnter(function(player)
+		for _, g in allGuardians() do
+			if g.target == player and g.state == "Chase" then
+				endChase(g, "safe")
 			end
 		end
 	end)
@@ -437,6 +479,7 @@ function GuardianAI.start(worldFolder: Instance)
 				endChase(g, "lost")
 			end
 		end
+		escaped[player] = nil
 	end)
 
 	task.spawn(function()
