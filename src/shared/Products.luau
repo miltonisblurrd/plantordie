@@ -22,15 +22,34 @@ local list: { Product } = {
 	{ Key = "GrowthBoost", Id = 3719422286, PriceRobux = 4, Benefit = "2x growth speed for every plant for 30 minutes (stacks time if already active).", Seconds = 30 * 60 },
 	{ Key = "HalloweenPack", Id = 3719422493, PriceRobux = 149, Benefit = "One Halloween Seed Pack: 1 seed rolled from the odds table shown.", Event = "Halloween2026" },
 	{ Key = "Unstun", Id = 3719797623, PriceRobux = 11, Benefit = "Instantly wakes the stunned plant you picked. It can attack again and starts earning money right away." },
-	{ Key = "TreadmillLevel", Id = 0, PriceRobux = 499, Benefit = "Upgrade your treadmill by one level." },
+	{ Key = "TreadmillLevel", Id = 3729067391, PriceRobux = 499, Benefit = "Upgrade your treadmill by one level." },
+}
+
+local BOOST_IDS: { [string]: number } = {
+	SpeedRobux1 = 3729067886,
+	SpeedRobux2 = 3729068494,
+	SpeedRobux3 = 3729068630,
+	SpeedRobux4 = 3729069214,
+	SpeedRobux5 = 3729069890,
+	SpeedRobux6 = 3729070087,
+	SpeedRobux7 = 3729070267,
+	SpeedRobux8 = 3729070481,
+	LuckRobux1 = 3729070642,
+	LuckRobux2 = 3729071084,
+	LuckRobux3 = 3729071226,
+	LuckRobux4 = 3729071432,
+	LuckRobux5 = 3729071625,
+	LuckRobux6 = 3729071775,
+	LuckRobux7 = 3729071932,
+	LuckRobux8 = 3729072054,
 }
 
 local Boosts = require(script.Parent.RobuxBoosts)
 for _, tier in Boosts.Speed do
-	table.insert(list, { Key = tier.Key, Id = 0, PriceRobux = tier.Price, Benefit = tier.Benefit })
+	table.insert(list, { Key = tier.Key, Id = BOOST_IDS[tier.Key], PriceRobux = tier.Price, Benefit = tier.Benefit })
 end
 for _, tier in Boosts.Luck do
-	table.insert(list, { Key = tier.Key, Id = 0, PriceRobux = tier.Price, Benefit = tier.Benefit })
+	table.insert(list, { Key = tier.Key, Id = BOOST_IDS[tier.Key], PriceRobux = tier.Price, Benefit = tier.Benefit })
 end
 
 
