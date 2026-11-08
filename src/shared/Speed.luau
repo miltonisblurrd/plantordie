@@ -6,8 +6,8 @@ local Config = require(script.Parent.Config)
 local Speed = {}
 
 Speed.Base = 16
-Speed.Bonus = 24 -- reached at Speed.FullAt
-Speed.FullAt = 15 -- log10 of speed for the full bonus (1e15)
+Speed.Bonus = 36 -- reached at Speed.FullAt
+Speed.FullAt = 12 -- log10 of speed for the full bonus (1e12)
 
 function Speed.walkSpeedFor(speed: number): number
 	local t = math.clamp(math.log10(1 + math.max(0, speed)) / Speed.FullAt, 0, 1)
