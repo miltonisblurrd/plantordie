@@ -44,7 +44,8 @@ local Config = {
 		PlotGap = 10,
 		GroundY = 0,
 		-- The walled home base: a U of plots (2 left, 2 back, 2 right) around the hub, open toward biome 1.
-		ArmInnerX = 78, -- equals Plot.Width so the back row fits exactly between the side arms
+		ArmInnerX = 98, -- Plot.Width plus PortalClear, so the back row still fits between the side arms
+		PortalClear = 20, -- gap where a portal faces the next plot or the back row
 		BaseFrontZ = 48, -- front wall line, between the Safe Zone line and the biome 1 gate
 		BaseBackGap = 16, -- grass strip behind every plot; the pond upgrade reaches ~15 studs past the plot edge
 		BaseOpening = 52,
@@ -141,7 +142,12 @@ local Config = {
 		Columns = 9,
 		GardenOriginX = -24,
 		HouseX = -32,
-		ZombieSpawnX = 34,
+		-- Soil ends at GrassX. The stone apron runs to the mouth; monsters spawn inside it.
+		-- Plants and monster attacks stay quiet until a monster crosses GrassX.
+		GrassX = 30, -- GardenOriginX + Columns * TileSize
+		PortalFrontX = 44,
+		PortalBackX = 52,
+		ZombieSpawnX = 47,
 	},
 
 	Garden = {
@@ -186,7 +192,7 @@ local Config = {
 		StuckSeconds = 8, -- no progress while not attacking -> despawn
 		MeleeReach = 5, -- studs between zombie and plant to start chewing
 		HouseHitMultiplier = 3, -- a zombie reaching the house hits once for Damage x this, then leaves
-		LaneSpawnJitter = 4, -- studs of random extra spawn distance so zombies don't stack
+		LaneSpawnJitter = 3, -- studs of random extra spawn distance, still inside the mouth
 		-- Wave size per unlocked lane, so players with fewer lanes face the same density.
 		PerLaneBase = 3,
 		PerLaneGrowth = 0.25, -- per night

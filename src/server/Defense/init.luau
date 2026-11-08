@@ -209,7 +209,7 @@ local function spawnOne(st: PlotState, kind: string, t: number)
 		return
 	end
 	local lane = rng:NextInteger(1, math.clamp(session.data.lanesUnlocked, 1, P.Lanes))
-	local x = P.ZombieSpawnX + rng:NextNumber() * D.LaneSpawnJitter
+	local x = math.min(P.PortalBackX - 1.5, P.ZombieSpawnX + rng:NextNumber() * D.LaneSpawnJitter)
 	nextId += 1
 	local stats = Zombies.stats(kind, w.biome, w.night)
 	local strength = Upgrades.portalOf(session.data.portalTier).Strength

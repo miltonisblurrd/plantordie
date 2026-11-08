@@ -266,13 +266,78 @@ local function buildTreadmill(refs: PlotRefs)
 	treadmillPrompt(board, "TreadmillRobuxPrompt", "Upgrade (R$)", Enum.KeyCode.R)
 end
 
+-- Full-width mouth at the end of the stone apron. Monsters spawn in the opening and walk toward the soil.
+local function buildPortal(parent: Instance, cf: CFrame, span: number)
+	local portal = Parts.model("Portal", parent)
+	local front, back = P.PortalFrontX, P.PortalBackX
+	local depth = back - front
+	local midX = (front + back) / 2
+	local height = 16
+	local jamb = 3.2
+	local frame = Color3.fromRGB(36, 32, 72)
+	local trim = Color3.fromRGB(150, 70, 255)
+	local mouth = Color3.fromRGB(6, 4, 16)
+
+	Parts.make({
+		Name = "MouthFloor", Parent = portal, Color = Color3.fromRGB(72, 68, 96),
+		Size = Vector3.new(depth, 0.4, span - jamb * 2),
+		CFrame = cf * CFrame.new(midX, 0.2, 0),
+	})
+	Parts.make({
+		Name = "Void", Parent = portal, Color = mouth, Material = Enum.Material.Neon, CanCollide = false,
+		Size = Vector3.new(1.2, height - 3, span - jamb * 2),
+		CFrame = cf * CFrame.new(back - 1, height / 2, 0),
+	})
+	for _, side in { -1, 1 } do
+		Parts.make({
+			Name = "Jamb", Parent = portal, Color = frame,
+			Size = Vector3.new(depth, height, jamb),
+			CFrame = cf * CFrame.new(midX, height / 2, side * (span / 2 - jamb / 2)),
+		})
+		Parts.make({
+			Name = "JambTrim", Parent = portal, Color = trim, Material = Enum.Material.Neon, CanCollide = false,
+			Size = Vector3.new(0.4, height - 1, 0.4),
+			CFrame = cf * CFrame.new(front, height / 2, side * (span / 2 - jamb)),
+		})
+	end
+	local lintel = Parts.make({
+		Name = "Lintel", Parent = portal, Color = frame,
+		Size = Vector3.new(depth, 3.2, span),
+		CFrame = cf * CFrame.new(midX, height - 1.6, 0),
+	})
+	Parts.make({
+		Name = "LintelTrim", Parent = portal, Color = trim, Material = Enum.Material.Neon, CanCollide = false,
+		Size = Vector3.new(0.4, 0.5, span - jamb * 2),
+		CFrame = cf * CFrame.new(front, height - 3.4, 0),
+	})
+	local swirl = Instance.new("ParticleEmitter")
+	swirl.Rate = 24
+	swirl.Lifetime = NumberRange.new(0.8, 1.6)
+	swirl.Speed = NumberRange.new(1, 3)
+	swirl.SpreadAngle = Vector2.new(180, 40)
+	swirl.LightEmission = 0.8
+	swirl.Size = NumberSequence.new(0.8, 0)
+	swirl.Color = ColorSequence.new(Color3.fromRGB(180, 80, 255), Color3.fromRGB(255, 60, 80))
+	swirl.Parent = lintel
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "PortalPrompt"
+	prompt.ActionText = "Upgrade"
+	prompt.ObjectText = "Portal"
+	prompt.MaxActivationDistance = 18
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = lintel
+end
+
 function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRefs
 	local model = Parts.model(`Plot_{index}`, parent)
 	model:SetAttribute("PlotIndex", index)
 
+	-- Ground reaches the back of the portal. The house side stays on the old edge.
+	local groundX0, groundX1 = -P.Width / 2, P.PortalBackX + 1
 	local ground = Parts.make({
 		Name = "Ground", Parent = model, Color = GRASS, Material = Enum.Material.Grass,
-		Size = Vector3.new(P.Width, 1, P.Depth), CFrame = cf * CFrame.new(0, -0.5, 0),
+		Size = Vector3.new(groundX1 - groundX0, 1, P.Depth),
+		CFrame = cf * CFrame.new((groundX0 + groundX1) / 2, -0.5, 0),
 	})
 	model.PrimaryPart = ground
 
@@ -282,10 +347,11 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		Name = "GardenBorder", Parent = model, Color = Color3.fromRGB(110, 74, 44),
 		Size = Vector3.new(gardenW + 2, 0.4, gardenD + 2), CFrame = cf * CFrame.new(midX, 0.2, 0),
 	})
+	local apronLen = P.PortalFrontX - P.GrassX
 	Parts.make({
-		Name = "ZombieRoad", Parent = model, Color = PATH,
-		Size = Vector3.new(P.Width / 2 - (P.GardenOriginX + gardenW) - 1, 0.3, gardenD),
-		CFrame = cf * CFrame.new((P.GardenOriginX + gardenW + P.Width / 2) / 2, 0.15, 0),
+		Name = "Apron", Parent = model, Color = Color3.fromRGB(118, 112, 140),
+		Size = Vector3.new(apronLen, 0.35, gardenD),
+		CFrame = cf * CFrame.new(P.GrassX + apronLen / 2, 0.18, 0),
 	})
 	Parts.make({
 		Name = "FrontPath", Parent = model, Color = PATH,
@@ -312,9 +378,9 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		end
 	end
 	local hx, hz = P.Width / 2 - inset, P.Depth / 2 - inset
+	local portalX = P.PortalBackX
 	fence("FenceLeft", Vector3.new(-hx, 0, -hz), Vector3.new(-hx, 0, hz))
-	fence("FenceRight", Vector3.new(hx, 0, -hz), Vector3.new(hx, 0, hz))
-	fence("FenceBack", Vector3.new(-hx, 0, hz), Vector3.new(hx, 0, hz))
+	fence("FenceBack", Vector3.new(-hx, 0, hz), Vector3.new(portalX, 0, hz))
 
 	local refs: PlotRefs = {
 		index = index,
@@ -394,36 +460,7 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 	stroke.Parent = label
 	refs.ownerLabel = label
 
-	local portalCf = cf * CFrame.new(P.ZombieSpawnX, 0, 0)
-	local portal = Parts.model("Portal", model)
-	local ring = Parts.make({
-		Name = "Ring", Parent = portal, Color = Color3.fromRGB(120, 40, 220), Material = Enum.Material.Neon,
-		Shape = Enum.PartType.Cylinder, CanCollide = false,
-		Size = Vector3.new(0.6, 10, 10),
-		CFrame = portalCf * CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, math.rad(90)),
-	})
-	Parts.make({
-		Name = "Mouth", Parent = portal, Color = Color3.fromRGB(20, 0, 40), Material = Enum.Material.Neon,
-		Shape = Enum.PartType.Cylinder, CanCollide = false,
-		Size = Vector3.new(0.4, 7, 7),
-		CFrame = ring.CFrame,
-	})
-	local swirl = Instance.new("ParticleEmitter")
-	swirl.Rate = 18
-	swirl.Lifetime = NumberRange.new(0.8, 1.4)
-	swirl.Speed = NumberRange.new(1, 3)
-	swirl.SpreadAngle = Vector2.new(180, 180)
-	swirl.LightEmission = 0.8
-	swirl.Size = NumberSequence.new(0.6, 0)
-	swirl.Color = ColorSequence.new(Color3.fromRGB(180, 80, 255), Color3.fromRGB(255, 60, 80))
-	swirl.Parent = ring
-	local prompt = Instance.new("ProximityPrompt")
-	prompt.Name = "PortalPrompt"
-	prompt.ActionText = "Upgrade"
-	prompt.ObjectText = "Portal"
-	prompt.MaxActivationDistance = 12
-	prompt.RequiresLineOfSight = false
-	prompt.Parent = ring
+	buildPortal(model, cf, gardenD)
 
 	local water = Instance.new("Folder")
 	water.Name = "Water"

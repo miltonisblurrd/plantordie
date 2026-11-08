@@ -186,8 +186,7 @@ function Plots.start(worldFolder: Instance)
 		PlotBuilder.setLanes(refs, Config.Start.LanesUnlocked)
 		refsByIndex[i] = refs
 		local portal = refs.model:FindFirstChild("Portal")
-		local ring = portal and portal:FindFirstChild("Ring")
-		local prompt = ring and ring:FindFirstChild("PortalPrompt")
+		local prompt = portal and portal:FindFirstChild("PortalPrompt", true)
 		if prompt and prompt:IsA("ProximityPrompt") then
 			prompt.Triggered:Connect(function(player)
 				if Plots.isOwner(player, refs.model) then

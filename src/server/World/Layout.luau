@@ -22,14 +22,17 @@ end
 -- 5-6 on the right arm (back to front). Plots touch; the open end faces biome 1 (+Z).
 local FRONT_Z = P.Depth / 2
 local ARM_X = W.ArmInnerX + P.Depth / 2
-local BACK_ROW_Z = FRONT_Z - 2 * P.Width - P.Depth / 2
+-- Portal mouths hang past the plot box. Clear separates a mouth from the plot it faces,
+-- and the back row sits far enough behind the side arms that those mouths stay in the gap.
+local CLEAR = W.PortalClear
+local BACK_ROW_Z = FRONT_Z - 2 * P.Width - P.Depth / 2 - CLEAR - (P.PortalBackX - P.Width / 2 + 4)
 
 local PLOT_SPOTS: { { pos: Vector3, look: Vector3 } } = {
 	{ pos = Vector3.new(-ARM_X, 0, FRONT_Z - P.Width / 2), look = Vector3.new(1, 0, 0) },
-	{ pos = Vector3.new(-ARM_X, 0, FRONT_Z - P.Width * 1.5), look = Vector3.new(1, 0, 0) },
-	{ pos = Vector3.new(-P.Width / 2, 0, BACK_ROW_Z), look = Vector3.new(0, 0, 1) },
+	{ pos = Vector3.new(-ARM_X, 0, FRONT_Z - P.Width * 1.5 - CLEAR), look = Vector3.new(1, 0, 0) },
+	{ pos = Vector3.new(-P.Width / 2 - CLEAR, 0, BACK_ROW_Z), look = Vector3.new(0, 0, 1) },
 	{ pos = Vector3.new(P.Width / 2, 0, BACK_ROW_Z), look = Vector3.new(0, 0, 1) },
-	{ pos = Vector3.new(ARM_X, 0, FRONT_Z - P.Width * 1.5), look = Vector3.new(-1, 0, 0) },
+	{ pos = Vector3.new(ARM_X, 0, FRONT_Z - P.Width * 1.5 - CLEAR), look = Vector3.new(-1, 0, 0) },
 	{ pos = Vector3.new(ARM_X, 0, FRONT_Z - P.Width / 2), look = Vector3.new(-1, 0, 0) },
 }
 assert(#PLOT_SPOTS == W.PlotCount, "Layout has one spot per plot")
@@ -42,7 +45,7 @@ end
 
 -- Inside faces of the base walls: X in [-halfX, halfX], Z in [backZ, frontZ].
 function Layout.baseBounds(): (number, number, number)
-	return W.ArmInnerX + P.Depth + W.BaseBackGap, FRONT_Z - 2 * P.Width - P.Depth - W.BaseBackGap, W.BaseFrontZ
+	return W.ArmInnerX + P.Depth + W.BaseBackGap, BACK_ROW_Z - P.Depth / 2 - W.BaseBackGap, W.BaseFrontZ
 end
 
 function Layout.plotAngle(_index: number): number

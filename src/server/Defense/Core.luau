@@ -10,6 +10,7 @@ local Combat = require(ReplicatedStorage.Shared.Combat)
 local Zombies = require(ReplicatedStorage.Shared.Zombies)
 
 local D = Config.Defense
+local GRASS_X = Config.Plot.GrassX
 
 export type Zombie = {
 	id: number,
@@ -152,7 +153,7 @@ end
 local function laneTarget(f: Field, p: Plant, range: number): Zombie?
 	local best: Zombie? = nil
 	for _, z in f.zombies do
-		if not z.dead and z.lane == p.lane and z.x >= p.x and z.x - p.x <= range then
+		if not z.dead and z.x <= GRASS_X and z.lane == p.lane and z.x >= p.x and z.x - p.x <= range then
 			if not best or z.x < best.x then
 				best = z
 			end
@@ -169,7 +170,7 @@ local function plantStep(f: Field, p: Plant, now: number, out: { Event })
 	if s.role == "AoE" then
 		local hit = false
 		for _, z in f.zombies do
-			if not z.dead and math.abs(z.lane - p.lane) <= 1 and math.abs(z.x - p.x) <= s.range then
+			if not z.dead and z.x <= GRASS_X and math.abs(z.lane - p.lane) <= 1 and math.abs(z.x - p.x) <= s.range then
 				hit = true
 				Core.damage(z, s.damage, "AoE", out)
 			end
@@ -247,41 +248,44 @@ local function zombieStep(f: Field, z: Zombie, dt: number, now: number, out: { E
 	end
 	local reach = if z.ability == "Ranged" then z.range else D.MeleeReach
 	local target: Plant? = nil
-	for _, p in f.plants do
-		if not p.wilted and p.lane == z.lane and p.x <= z.x and z.x - p.x <= reach then
-			if not target or p.x > target.x then
-				target = p
-			end
-		end
-	end
-	if target and z.ability == "Jump" and not z.jumped then
-		z.jumped = true
-		z.x = target.x - D.MeleeReach - 1
-		z.progressX, z.progressAt = z.x, now
-		table.insert(out, { kind = "jump", zombie = z })
-		return
-	end
-	if target then
-		z.attacking = true
-		z.progressAt = now
-		if now >= z.nextAttack then
-			z.nextAttack = now + 1 / z.rate
-			target.hp -= z.damage
-			table.insert(out, { kind = if z.ability == "Ranged" then "spit" else "bite", zombie = z, plant = target })
-			local s = target.stats
-			if s and s.role == "Wall" then
-				if s.ability == "Freeze" then
-					z.frozenUntil = now + Combat.FreezeOnHitSeconds
+	-- The apron is safe. Attacks, including ranged shots and jumps, start on the grass.
+	if z.x <= GRASS_X then
+		for _, p in f.plants do
+			if not p.wilted and p.lane == z.lane and p.x <= z.x and z.x - p.x <= reach then
+				if not target or p.x > target.x then
+					target = p
 				end
-				Core.damage(z, s.damage, "thorns", out)
-			end
-			if target.hp <= 0 then
-				target.hp = 0
-				target.wilted = true
-				table.insert(out, { kind = "wilt", plant = target })
 			end
 		end
-		return
+		if target and z.ability == "Jump" and not z.jumped then
+			z.jumped = true
+			z.x = target.x - D.MeleeReach - 1
+			z.progressX, z.progressAt = z.x, now
+			table.insert(out, { kind = "jump", zombie = z })
+			return
+		end
+		if target then
+			z.attacking = true
+			z.progressAt = now
+			if now >= z.nextAttack then
+				z.nextAttack = now + 1 / z.rate
+				target.hp -= z.damage
+				table.insert(out, { kind = if z.ability == "Ranged" then "spit" else "bite", zombie = z, plant = target })
+				local s = target.stats
+				if s and s.role == "Wall" then
+					if s.ability == "Freeze" then
+						z.frozenUntil = now + Combat.FreezeOnHitSeconds
+					end
+					Core.damage(z, s.damage, "thorns", out)
+				end
+				if target.hp <= 0 then
+					target.hp = 0
+					target.wilted = true
+					table.insert(out, { kind = "wilt", plant = target })
+				end
+			end
+			return
+		end
 	end
 	local speed = z.speed * (if now < z.slowUntil then Combat.SlowFactor else 1)
 	z.x -= speed * dt
