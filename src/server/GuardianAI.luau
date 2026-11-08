@@ -11,7 +11,9 @@
 -- No guardian ever moves into the Safe Zone: every step is clamped at its boundary.
 --   Catch   -> knockback + stun, the seed drops where the carrier stood, no catches for
 --              CooldownSeconds. A new chase needs a new pickup.
--- Chase speed = Speed.guardianSpeedFor(biome RecommendedSpeed). Day/night has no effect.
+-- Chase speed follows the carrier: a speed stat above the biome's RecommendedSpeed outruns the
+-- guardian (OutrunFactor x their carrying walk speed); at or below it, the guardian is faster
+-- (CatchFactor). Patrol runs at Speed.guardianSpeedFor(RecommendedSpeed). Day/night has no effect.
 -- Patrolling guardians in biomes with no players skip their update (sleep); chasing or
 -- returning ones never sleep. A seasonal event may add one guardian over its own zone, which
 -- chases carriers of seeds whose origin is that event id.
@@ -49,6 +51,7 @@ type Guardian = {
 	facing: Vector3,
 	state: State,
 	patrolIdx: number,
+	recommended: number,
 	chaseSpeed: number,
 	patrolSpeed: number,
 	target: Player?,
@@ -229,6 +232,13 @@ local function chase(g: Guardian, dt: number, now: number)
 		return
 	end
 
+	local session = Data.get(target)
+	if session then
+		local stat = session.data.speed
+		local carrierWalk = Speed.walkSpeedFor(stat) * Config.Carry.SpeedFactor
+		g.chaseSpeed = carrierWalk * (if stat > g.recommended then G.OutrunFactor else G.CatchFactor)
+	end
+
 	local lead = tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict
 	local goal = Vector3.new(lead.X, groundY(), lead.Z)
 	if not g.computing and now - g.lastCompute >= g.def.RecomputeSeconds then
@@ -333,10 +343,9 @@ function GuardianAI.awakeCount(): number
 	return n
 end
 
-local function speedFor(def: GuardianDefs.Guardian): number
+local function recommendedFor(def: GuardianDefs.Guardian): number
 	local biome = BiomeData.ById[def.Biome]
-	local recommended = def.RecommendedSpeed or (if biome then biome.RecommendedSpeed else 0)
-	return Speed.guardianSpeedFor(recommended)
+	return def.RecommendedSpeed or (if biome then biome.RecommendedSpeed else 0)
 end
 
 local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
@@ -351,13 +360,14 @@ local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
 	alert.Volume = 1
 	alert.RollOffMaxDistance = 120
 	alert.Parent = model.PrimaryPart
-	local chaseSpeed = speedFor(def)
+	local recommended = recommendedFor(def)
+	local baseSpeed = Speed.guardianSpeedFor(recommended)
 	local g: Guardian = {
 		def = def, zone = fields.zone, patrolPts = fields.patrolPts,
 		inRegion = fields.inRegion, clamp = fields.clamp, model = model,
 		path = PathfindingService:CreatePath({ AgentRadius = 2 * def.Scale, AgentHeight = 6 * def.Scale, AgentCanJump = false }),
 		pos = pos, facing = Vector3.new(0, 0, -1), state = "Patrol", patrolIdx = 2,
-		chaseSpeed = chaseSpeed, patrolSpeed = chaseSpeed * G.PatrolFactor,
+		recommended = recommended, chaseSpeed = baseSpeed, patrolSpeed = baseSpeed * G.PatrolFactor,
 		target = nil, chaseStartedAt = 0, noCatchUntil = 0, waypoints = {}, wpIdx = 1, lastCompute = 0,
 		computing = false, stuckFrom = pos, stuckAt = 0, sleeping = true, alert = alert,
 	}

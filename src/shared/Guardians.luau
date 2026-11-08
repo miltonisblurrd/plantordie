@@ -1,7 +1,7 @@
 --!strict
 -- One unique guardian per biome (spec §6). Later biomes recompute their path more often and lead
 -- their target (Predict = seconds of velocity look-ahead). Speed is not stored here: chase speed
--- comes from the biome's RecommendedSpeed via Speed.guardianSpeedFor.
+-- compares the carrier's speed stat to the biome's RecommendedSpeed (see GuardianAI).
 export type Shape = "Scarecrow" | "Brute" | "Spiky" | "Squat" | "Tall" | "Floating" | "Crab" | "Golem"
 export type Guardian = {
 	Biome: string,
