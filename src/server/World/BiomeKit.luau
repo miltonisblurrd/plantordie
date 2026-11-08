@@ -12,7 +12,7 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Parts = require(script.Parent.Parts)
 
 local B = Config.Biome
-local WALL_H = 26
+local WALL_H = Config.World.BaseWallHeight
 local ENTRANCE_W = 52
 local DESIGN_SIZE = 56 -- builders' scatter counts were tuned for this biome size
 local SCATTER_CAP = 2 -- full area scale (4x at 112) blows the boot part budget
@@ -112,44 +112,33 @@ end
 
 -- Floor + side walls + an entrance wall with a gap facing the hub. The back wall has a matching
 -- exit gap onto the trail to the next biome, except in the last biome.
-local function wallLook(id: string, pal: BiomeData.Palette): (Color3, Enum.Material, Color3)
-	if id == "GreenMeadows" then
-		return Color3.fromRGB(122, 86, 52), Enum.Material.Ground, pal.Ground
-	elseif id == "MushroomForest" then
-		return Color3.fromRGB(92, 64, 40), Enum.Material.Ground, Color3.fromRGB(70, 110, 60)
-	elseif id == "CactusCanyon" then
-		return Color3.fromRGB(196, 120, 64), Enum.Material.Sandstone, Color3.fromRGB(214, 150, 80)
-	elseif id == "InfernoJungle" then
-		return Color3.fromRGB(40, 32, 34), Enum.Material.Basalt, Color3.fromRGB(255, 90, 30)
-	elseif id == "FrostbiteGarden" then
-		return Color3.fromRGB(210, 230, 245), Enum.Material.Glacier, Color3.fromRGB(150, 210, 255)
-	elseif id == "EnchantedGrove" then
-		return Color3.fromRGB(90, 110, 80), Enum.Material.Slate, Color3.fromRGB(80, 200, 140)
-	elseif id == "TropicalParadise" then
-		return Color3.fromRGB(150, 100, 60), Enum.Material.Ground, Color3.fromRGB(40, 160, 70)
-	elseif id == "CoralKingdom" then
-		return Color3.fromRGB(180, 140, 130), Enum.Material.Sandstone, Color3.fromRGB(255, 127, 80)
-	elseif id == "AutumnWoods" then
-		return Color3.fromRGB(110, 70, 40), Enum.Material.Ground, Color3.fromRGB(200, 90, 30)
-	elseif id == "SkyIslands" then
-		return Color3.fromRGB(190, 180, 160), Enum.Material.Sandstone, Color3.fromRGB(235, 245, 255)
-	elseif id == "CrystalCaverns" then
-		return Color3.fromRGB(36, 36, 48), Enum.Material.Slate, Color3.fromRGB(92, 225, 230)
-	elseif id == "ToxicSwamp" then
-		return Color3.fromRGB(70, 90, 50), Enum.Material.Mud, Color3.fromRGB(166, 255, 0)
-	elseif id == "AncientWilds" then
-		return Color3.fromRGB(176, 150, 110), Enum.Material.Sandstone, Color3.fromRGB(120, 96, 70)
-	elseif id == "CosmicGarden" then
-		return Color3.fromRGB(40, 20, 70), Enum.Material.Slate, Color3.fromRGB(180, 120, 255)
-	end
-	return Color3.fromRGB(40, 16, 24), Enum.Material.Slate, Color3.fromRGB(255, 80, 140)
-end
+-- Wall body, wall material, cap colour, cap material. The colours tell the player which biome
+-- they are in at a glance, so each one is bold and matches the biome's plants.
+type WallLook = { body: Color3, mat: Enum.Material, cap: Color3, capMat: Enum.Material }
+local GRASS_MAT, SMOOTH, NEON_MAT = Enum.Material.Grass, Enum.Material.SmoothPlastic, Enum.Material.Neon
+local WALL_LOOKS: { [string]: WallLook } = {
+	GreenMeadows = { body = Color3.fromRGB(214, 118, 108), mat = SMOOTH, cap = Color3.fromRGB(98, 200, 72), capMat = GRASS_MAT },
+	MushroomForest = { body = Color3.fromRGB(110, 70, 150), mat = SMOOTH, cap = Color3.fromRGB(255, 77, 77), capMat = SMOOTH },
+	CactusCanyon = { body = Color3.fromRGB(222, 150, 80), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(63, 163, 77), capMat = GRASS_MAT },
+	InfernoJungle = { body = Color3.fromRGB(34, 28, 30), mat = Enum.Material.Basalt, cap = Color3.fromRGB(255, 90, 31), capMat = NEON_MAT },
+	FrostbiteGarden = { body = Color3.fromRGB(150, 205, 245), mat = Enum.Material.Ice, cap = Color3.fromRGB(245, 250, 255), capMat = Enum.Material.Snow },
+	EnchantedGrove = { body = Color3.fromRGB(90, 62, 133), mat = SMOOTH, cap = Color3.fromRGB(124, 255, 203), capMat = NEON_MAT },
+	TropicalParadise = { body = Color3.fromRGB(0, 170, 150), mat = SMOOTH, cap = Color3.fromRGB(247, 225, 160), capMat = Enum.Material.Sand },
+	CoralKingdom = { body = Color3.fromRGB(42, 130, 220), mat = SMOOTH, cap = Color3.fromRGB(255, 127, 80), capMat = SMOOTH },
+	AutumnWoods = { body = Color3.fromRGB(160, 80, 30), mat = SMOOTH, cap = Color3.fromRGB(255, 140, 0), capMat = SMOOTH },
+	SkyIslands = { body = Color3.fromRGB(142, 201, 255), mat = SMOOTH, cap = Color3.fromRGB(255, 255, 255), capMat = SMOOTH },
+	CrystalCaverns = { body = Color3.fromRGB(45, 45, 70), mat = Enum.Material.Slate, cap = Color3.fromRGB(92, 225, 230), capMat = NEON_MAT },
+	ToxicSwamp = { body = Color3.fromRGB(60, 75, 35), mat = Enum.Material.Mud, cap = Color3.fromRGB(166, 255, 0), capMat = NEON_MAT },
+	AncientWilds = { body = Color3.fromRGB(176, 150, 110), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(106, 153, 78), capMat = GRASS_MAT },
+	CosmicGarden = { body = Color3.fromRGB(40, 20, 80), mat = SMOOTH, cap = Color3.fromRGB(180, 120, 255), capMat = NEON_MAT },
+	ForbiddenBloom = { body = Color3.fromRGB(43, 10, 18), mat = Enum.Material.Slate, cap = Color3.fromRGB(255, 30, 86), capMat = NEON_MAT },
+}
 
-local function wall(ctx: Ctx, name: string, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material, cap: Color3)
-	local body = part(ctx, name, size, cf, color, { Parent = ctx.model, Material = material })
+local function wall(ctx: Ctx, name: string, size: Vector3, cf: CFrame, look: WallLook)
+	local body = part(ctx, name, size, cf, look.body, { Parent = ctx.model, Material = look.mat })
 	local capH = 2
-	part(ctx, name .. "Cap", Vector3.new(size.X, capH, size.Z), cf * CFrame.new(0, size.Y / 2 + capH / 2, 0), cap,
-		{ Parent = ctx.model, Material = if cap.R > 0.6 and cap.G < 0.5 then Enum.Material.Neon else Enum.Material.Grass })
+	part(ctx, name .. "Cap", Vector3.new(size.X + 0.6, capH, size.Z + 0.6), cf * CFrame.new(0, size.Y / 2 + capH / 2, 0), look.cap,
+		{ Parent = ctx.model, Material = look.capMat })
 	return body
 end
 
@@ -158,13 +147,13 @@ function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 	local floor = part(ctx, "Floor", Vector3.new(w, 1, len), ctx.cf * CFrame.new(0, -0.4, 0), color or ctx.pal.Ground,
 		{ Material = material or Enum.Material.Grass, Parent = ctx.model })
 	floor:SetAttribute("BiomeFloor", true)
-	local wallColor, wallMat, cap = wallLook(ctx.biome.Id, ctx.pal)
-	wall(ctx, "WallLeft", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(-w / 2, WALL_H / 2, 0), wallColor, wallMat, cap)
-	wall(ctx, "WallRight", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(w / 2, WALL_H / 2, 0), wallColor, wallMat, cap)
+	local look = WALL_LOOKS[ctx.biome.Id] or WALL_LOOKS.GreenMeadows
+	wall(ctx, "WallLeft", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(-w / 2, WALL_H / 2, 0), look)
+	wall(ctx, "WallRight", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(w / 2, WALL_H / 2, 0), look)
 	local seg = (w - ENTRANCE_W) / 2
 	for _, side in { -1, 1 } do
 		wall(ctx, "WallFront", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, -len / 2), wallColor, wallMat, cap)
+			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, -len / 2), look)
 	end
 	local arch = part(ctx, "EntranceSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
 		ctx.cf * CFrame.new(0, WALL_H + 4, -len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })
@@ -172,12 +161,12 @@ function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 	Parts.surfaceText(arch, Enum.NormalId.Front, ctx.biome.Name, ctx.pal.Accent1)
 	local nextBiome = BiomeData.List[ctx.biome.Index + 1]
 	if ctx.biome.Index >= BiomeData.Count or not nextBiome then
-		wall(ctx, "WallBack", Vector3.new(w, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, len / 2), wallColor, wallMat, cap)
+		wall(ctx, "WallBack", Vector3.new(w, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, len / 2), look)
 		return
 	end
 	for _, side in { -1, 1 } do
 		wall(ctx, "WallBack", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, len / 2), wallColor, wallMat, cap)
+			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, len / 2), look)
 	end
 	local exit = part(ctx, "ExitSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
 		ctx.cf * CFrame.new(0, WALL_H + 4, len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })

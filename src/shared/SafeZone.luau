@@ -13,12 +13,13 @@ local MIN_Y, MAX_Y = -20, 120
 
 local SafeZone = {}
 
-local halfRow = (W.PlotCount * (P.Width + W.PlotGap) - W.PlotGap) / 2
-local hubZ = -70
+-- The box is the inside of the walled base (see Layout.baseBounds).
+local halfX = W.ArmInnerX + P.Depth + W.BaseBackGap
+local backZ = P.Depth / 2 - 2 * P.Width - P.Depth - W.BaseBackGap
 
-SafeZone.MinX = -halfRow - S.SideMargin
-SafeZone.MaxX = halfRow + S.SideMargin
-SafeZone.MinZ = math.min(hubZ - W.HubRadius, -P.Depth / 2) - S.BackMargin
+SafeZone.MinX = -halfX
+SafeZone.MaxX = halfX
+SafeZone.MinZ = backZ
 SafeZone.MaxZ = P.Depth / 2 + S.FrontInset
 
 assert(SafeZone.MaxZ < P.Depth / 2 + Config.Biome.FrontGap, "Safe Zone must end before biome 1")

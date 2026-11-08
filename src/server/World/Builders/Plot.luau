@@ -27,6 +27,8 @@ local BELT = Color3.fromHex("#1E6FFF")
 local BELT_GRID = Color3.fromHex("#1046B8")
 local SIGN_NAVY = Color3.fromHex("#1C1F4A")
 local ROBUX = Color3.fromHex("#D63BFF")
+local FENCE_RAIL = Color3.fromRGB(150, 104, 64)
+local FENCE_POST = Color3.fromRGB(112, 76, 46)
 
 -- Treadmill footprint (plot local). In front of the house on the walkway side: clear of the
 -- largest house (front edge Z = -19), the garden border (Z >= -22) and the spawn (Z = -40).
@@ -289,21 +291,30 @@ function PlotBuilder.build(index: number, cf: CFrame, parent: Instance): PlotRef
 		Name = "FrontPath", Parent = model, Color = PATH,
 		Size = Vector3.new(P.Width - 4, 0.3, 10), CFrame = cf * CFrame.new(0, 0.15, -P.Depth / 2 + 8),
 	})
-	-- Sides and the biome-facing back. The hub side stays open so the path in is clear.
-	local plotWallH = 12
-	local wood = Color3.fromRGB(120, 82, 48)
-	for _, side in { -1, 1 } do
-		Parts.make({
-			Name = "PlotWall", Parent = model, Color = wood, Material = Enum.Material.WoodPlanks,
-			Size = Vector3.new(1.4, plotWallH, P.Depth - 4),
-			CFrame = cf * CFrame.new(side * (P.Width / 2 - 0.8), plotWallH / 2, 2),
-		})
+	-- Low fence on the sides and back. The hub side stays open so the path in is clear.
+	local fenceH = 3.6
+	local inset = 0.8
+	local function fence(name: string, from: Vector3, to: Vector3)
+		local mid, len = (from + to) / 2, (to - from).Magnitude
+		local along = CFrame.lookAt(mid, to)
+		for _, y in { fenceH * 0.45, fenceH * 0.9 } do
+			Parts.make({
+				Name = name .. "Rail", Parent = model, Color = FENCE_RAIL,
+				Size = Vector3.new(0.5, 0.45, len), CFrame = cf * along * CFrame.new(0, y, 0),
+			})
+		end
+		for i = 0, 4 do
+			Parts.make({
+				Name = name .. "Post", Parent = model, Color = FENCE_POST,
+				Size = Vector3.new(0.9, fenceH + 0.4, 0.9),
+				CFrame = cf * CFrame.new(from + (to - from) * (i / 4) + Vector3.new(0, (fenceH + 0.4) / 2, 0)),
+			})
+		end
 	end
-	Parts.make({
-		Name = "PlotWallBack", Parent = model, Color = wood, Material = Enum.Material.WoodPlanks,
-		Size = Vector3.new(P.Width - 2, plotWallH, 1.4),
-		CFrame = cf * CFrame.new(0, plotWallH / 2, P.Depth / 2 - 0.8),
-	})
+	local hx, hz = P.Width / 2 - inset, P.Depth / 2 - inset
+	fence("FenceLeft", Vector3.new(-hx, 0, -hz), Vector3.new(-hx, 0, hz))
+	fence("FenceRight", Vector3.new(hx, 0, -hz), Vector3.new(hx, 0, hz))
+	fence("FenceBack", Vector3.new(-hx, 0, hz), Vector3.new(hx, 0, hz))
 
 	local refs: PlotRefs = {
 		index = index,

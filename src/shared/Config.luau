@@ -40,9 +40,15 @@ local Config = {
 		HubRadius = 42,
 		GateRingRadius = 0, -- unused; biomes are a line in front of the plots
 		PlotRingRadius = 0,
-		PlotCount = 8,
+		PlotCount = 6, -- one per player; the server is capped at 6
 		PlotGap = 10,
 		GroundY = 0,
+		-- The walled home base: a U of plots (2 left, 2 back, 2 right) around the hub, open toward biome 1.
+		ArmInnerX = 78, -- equals Plot.Width so the back row fits exactly between the side arms
+		BaseFrontZ = 48, -- front wall line, between the Safe Zone line and the biome 1 gate
+		BaseBackGap = 16, -- grass strip behind every plot; the pond upgrade reaches ~15 studs past the plot edge
+		BaseOpening = 52,
+		BaseWallHeight = 28,
 	},
 
 	-- Biomes sit in one line in front of the plot row. Walk +Z to the next one.
@@ -82,8 +88,6 @@ local Config = {
 
 	-- The one shared Safe Zone: a box over the hub and every plot. Biomes are never safe.
 	SafeZone = {
-		SideMargin = 12, -- studs past the outermost plot walls
-		BackMargin = 12, -- studs behind the hub plaza
 		FrontInset = 14, -- boundary line, studs in front of the plot row (biome 1 starts at FrontGap)
 		CheckSeconds = 0.1,
 		Clearance = 1, -- guardians stop this far outside the boundary

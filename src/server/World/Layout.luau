@@ -1,7 +1,7 @@
 --!strict
--- Plots sit in one tight row. Biomes sit in a line in front of that row (+Z).
--- Walk forward from the plots to biome 1, then the next, and so on.
--- Plot local frame is unchanged: -Z faces the hub (behind the row), zombies enter from +X.
+-- Plots sit in a walled U around the hub. Biomes sit in a line in front of the base (+Z).
+-- Walk forward out of the base to biome 1, then the next, and so on.
+-- Plot local frame is unchanged: -Z faces the hub, zombies enter from +X.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -18,10 +18,31 @@ function Layout.plotSpan(): number
 	return P.Width + W.PlotGap
 end
 
+-- Plots form a U around the hub: 1-2 on the left arm (front to back), 3-4 across the back,
+-- 5-6 on the right arm (back to front). Plots touch; the open end faces biome 1 (+Z).
+local FRONT_Z = P.Depth / 2
+local ARM_X = W.ArmInnerX + P.Depth / 2
+local BACK_ROW_Z = FRONT_Z - 2 * P.Width - P.Depth / 2
+
+local PLOT_SPOTS: { { pos: Vector3, look: Vector3 } } = {
+	{ pos = Vector3.new(-ARM_X, 0, FRONT_Z - P.Width / 2), look = Vector3.new(1, 0, 0) },
+	{ pos = Vector3.new(-ARM_X, 0, FRONT_Z - P.Width * 1.5), look = Vector3.new(1, 0, 0) },
+	{ pos = Vector3.new(-P.Width / 2, 0, BACK_ROW_Z), look = Vector3.new(0, 0, 1) },
+	{ pos = Vector3.new(P.Width / 2, 0, BACK_ROW_Z), look = Vector3.new(0, 0, 1) },
+	{ pos = Vector3.new(ARM_X, 0, FRONT_Z - P.Width * 1.5), look = Vector3.new(-1, 0, 0) },
+	{ pos = Vector3.new(ARM_X, 0, FRONT_Z - P.Width / 2), look = Vector3.new(-1, 0, 0) },
+}
+assert(#PLOT_SPOTS == W.PlotCount, "Layout has one spot per plot")
+
 function Layout.plotCFrame(index: number): CFrame
-	local x = (index - (W.PlotCount + 1) / 2) * Layout.plotSpan()
-	local pos = Vector3.new(x, W.GroundY, 0)
-	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, -1))
+	local spot = PLOT_SPOTS[index]
+	local pos = spot.pos + Vector3.new(0, W.GroundY, 0)
+	return CFrame.lookAt(pos, pos + spot.look)
+end
+
+-- Inside faces of the base walls: X in [-halfX, halfX], Z in [backZ, frontZ].
+function Layout.baseBounds(): (number, number, number)
+	return W.ArmInnerX + P.Depth + W.BaseBackGap, FRONT_Z - 2 * P.Width - P.Depth - W.BaseBackGap, W.BaseFrontZ
 end
 
 function Layout.plotAngle(_index: number): number
@@ -65,7 +86,7 @@ function Layout.biomePath(biomeIndex: number): { Vector3 }
 end
 
 function Layout.mapExtent(): Vector3
-	local width = Layout.plotSpan() * W.PlotCount + 80
+	local width = (W.ArmInnerX + P.Depth + W.BaseBackGap) * 2 + 200
 	local depth = Layout.biomeCenterZ(15) + B.Size
 	return Vector3.new(width, 0, depth)
 end

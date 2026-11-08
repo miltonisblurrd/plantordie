@@ -9,6 +9,7 @@ local SafeZone = require(ReplicatedStorage.Shared.SafeZone)
 local Parts = require(script.Parent.Parent.Parts)
 local Layout = require(script.Parent.Parent.Layout)
 local Machine = require(script.Parent.Machine)
+local BaseWalls = require(script.Parent.BaseWalls)
 
 local W = Config.World
 
@@ -89,11 +90,14 @@ function Hub.build(parent: Instance): Model
 	local m = Parts.model("Hub", parent)
 
 	local extent = Layout.mapExtent()
+	local _, backZ = Layout.baseBounds()
+	local minZ, maxZ = backZ - 120, extent.Z + 80
 	Parts.make({
 		Name = "Baseplate", Parent = m, Color = Color3.fromRGB(78, 176, 70), Material = Enum.Material.Grass,
-		Size = Vector3.new(extent.X, 2, extent.Z + 120),
-		CFrame = CFrame.new(0, W.GroundY - 1.2, extent.Z / 2 - 40),
+		Size = Vector3.new(extent.X, 2, maxZ - minZ),
+		CFrame = CFrame.new(0, W.GroundY - 1.2, (minZ + maxZ) / 2),
 	})
+	BaseWalls.build(m)
 	disc("Plaza", W.HubRadius, W.GroundY + 0.2, 1, Color3.fromRGB(110, 222, 92), Enum.Material.Grass, m)
 
 	-- Fountain centrepiece, behind the plot row.
@@ -127,11 +131,12 @@ function Hub.build(parent: Instance): Model
 	spawn.Duration = 0
 	spawn.Parent = m
 
-	-- One shared path from the plaza to the middle of the plot row.
+	-- One shared path from the plaza out through the base opening.
+	local pathFrom, pathTo = -70 + W.HubRadius - 2, W.BaseFrontZ + 4
 	Parts.make({
 		Name = "PlotPath", Parent = m, Color = Color3.fromRGB(196, 186, 168),
-		Size = Vector3.new(14, 0.3, 36),
-		CFrame = CFrame.new(0, W.GroundY + 0.05, -36),
+		Size = Vector3.new(14, 0.3, pathTo - pathFrom),
+		CFrame = CFrame.new(0, W.GroundY + 0.05, (pathFrom + pathTo) / 2),
 	})
 
 	-- The shared Safe Zone boundary: one line across the full home entrance, one sign at the trail.
