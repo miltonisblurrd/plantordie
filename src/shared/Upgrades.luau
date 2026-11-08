@@ -28,27 +28,30 @@ export type WaterTier = {
 }
 
 -- Sold at the hub Shovel Shop; any owned tier can be equipped. LuckBonus tops out at Config.Dig.MaxLuck.
+-- Damage is soil HP per swing. Normal mound HP is biome index * 10, so each shovel one-swings
+-- every normal mound through its band: Inferno biomes 1–2, Emerald 1–4, Plasma 1–5,
+-- Toxic 1–8, Ancient 1–11, Cosmic 1–13, Divine 1–15. Cheaper shovels chip biome 1 over several swings.
 local SMOOTH, NEON, GLASS, METAL = Enum.Material.SmoothPlastic, Enum.Material.Neon, Enum.Material.Glass, Enum.Material.Metal
 local shovels: { Shovel } = {
 	{ Tier = 1, Name = "Starter Shovel", Cost = 0, DigSeconds = 3, LuckBonus = 0, ToughTier = 1, Damage = 3,
 		Color = Color3.fromHex("#8B6B4A"), Accent = Color3.fromHex("#6B4A2E"), Material = SMOOTH },
 	{ Tier = 2, Name = "Steel Shovel", Cost = 25_000, DigSeconds = 2.5, LuckBonus = 0.05, ToughTier = 2, Damage = 4,
 		Color = Color3.fromHex("#B0B6BE"), Accent = Color3.fromHex("#6E747C"), Material = METAL },
-	{ Tier = 3, Name = "Crystal Shovel", Cost = 250_000, DigSeconds = 2.1, LuckBonus = 0.1, ToughTier = 3, Damage = 6,
+	{ Tier = 3, Name = "Crystal Shovel", Cost = 250_000, DigSeconds = 2.1, LuckBonus = 0.1, ToughTier = 3, Damage = 5,
 		Color = Color3.fromHex("#5CE1E6"), Accent = Color3.fromHex("#BFF8FF"), Material = GLASS, Effect = "Sparkle" },
-	{ Tier = 4, Name = "Inferno Shovel", Cost = 2_500_000, DigSeconds = 1.8, LuckBonus = 0.15, ToughTier = 4, Damage = 9,
+	{ Tier = 4, Name = "Inferno Shovel", Cost = 2_500_000, DigSeconds = 1.8, LuckBonus = 0.15, ToughTier = 4, Damage = 20,
 		Color = Color3.fromHex("#FF7A1A"), Accent = Color3.fromHex("#FFD34A"), Material = NEON, Effect = "Fire" },
-	{ Tier = 5, Name = "Emerald Shovel", Cost = 25_000_000, DigSeconds = 1.5, LuckBonus = 0.2, ToughTier = 5, Damage = 12,
+	{ Tier = 5, Name = "Emerald Shovel", Cost = 25_000_000, DigSeconds = 1.5, LuckBonus = 0.2, ToughTier = 5, Damage = 40,
 		Color = Color3.fromHex("#2EE06A"), Accent = Color3.fromHex("#0E7A34"), Material = NEON, Effect = "Sparkle" },
-	{ Tier = 6, Name = "Plasma Shovel", Cost = 250_000_000, DigSeconds = 1.2, LuckBonus = 0.25, ToughTier = 5, Damage = 16,
+	{ Tier = 6, Name = "Plasma Shovel", Cost = 250_000_000, DigSeconds = 1.2, LuckBonus = 0.25, ToughTier = 5, Damage = 50,
 		Color = Color3.fromHex("#FF2FD0"), Accent = Color3.fromHex("#7A00A8"), Material = NEON, Effect = "Sparkle" },
-	{ Tier = 7, Name = "Toxic Shovel", Cost = 2_500_000_000, DigSeconds = 1, LuckBonus = 0.3, ToughTier = 5, Damage = 22,
+	{ Tier = 7, Name = "Toxic Shovel", Cost = 2_500_000_000, DigSeconds = 1, LuckBonus = 0.3, ToughTier = 5, Damage = 80,
 		Color = Color3.fromHex("#B6FF2E"), Accent = Color3.fromHex("#3D5A00"), Material = NEON, Effect = "Smoke" },
-	{ Tier = 8, Name = "Ancient Shovel", Cost = 25_000_000_000, DigSeconds = 0.8, LuckBonus = 0.38, ToughTier = 5, Damage = 30,
+	{ Tier = 8, Name = "Ancient Shovel", Cost = 25_000_000_000, DigSeconds = 0.8, LuckBonus = 0.38, ToughTier = 5, Damage = 110,
 		Color = Color3.fromHex("#CD7F32"), Accent = Color3.fromHex("#5A3A1A"), Material = METAL, Effect = "Sparkle" },
-	{ Tier = 9, Name = "Cosmic Shovel", Cost = 250_000_000_000, DigSeconds = 0.65, LuckBonus = 0.44, ToughTier = 5, Damage = 40,
+	{ Tier = 9, Name = "Cosmic Shovel", Cost = 250_000_000_000, DigSeconds = 0.65, LuckBonus = 0.44, ToughTier = 5, Damage = 130,
 		Color = Color3.fromHex("#7A2BFF"), Accent = Color3.fromHex("#FFFFFF"), Material = NEON, Effect = "Stars" },
-	{ Tier = 10, Name = "Divine Shovel", Cost = 2_500_000_000_000, DigSeconds = 0.5, LuckBonus = 0.5, ToughTier = 5, Damage = 55,
+	{ Tier = 10, Name = "Divine Shovel", Cost = 2_500_000_000_000, DigSeconds = 0.5, LuckBonus = 0.5, ToughTier = 5, Damage = 150,
 		Color = Color3.fromHex("#FFD23F"), Accent = Color3.fromHex("#FFFFFF"), Material = NEON, Effect = "Sparkle" },
 }
 

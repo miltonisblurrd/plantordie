@@ -24,6 +24,7 @@ local Shovel = {}
 local player = Players.LocalPlayer
 local lastSwing = 0
 local auto = false
+local watchedSpots: { [Instance]: boolean } = {}
 
 local function nearestSpot(root: BasePart): Model?
 	local world = workspace:FindFirstChild("World")
@@ -100,6 +101,72 @@ local function hookTool(inst: Instance)
 			auto = false
 		end)
 	end
+end
+
+local function refreshBar(spot: Model)
+	local hp = spot:GetAttribute("DigHp")
+	local maxHp = spot:GetAttribute("DigMaxHp")
+	local bar = spot:FindFirstChild("DigBar")
+	local show = type(hp) == "number" and type(maxHp) == "number" and maxHp > 0 and hp > 0 and hp < maxHp
+	if not show then
+		if bar then
+			bar:Destroy()
+		end
+		return
+	end
+	local adornee = spot.PrimaryPart or spot:FindFirstChild("Body")
+	if not adornee or not adornee:IsA("BasePart") then
+		return
+	end
+	local gui: BillboardGui
+	local fill: Frame
+	if bar and bar:IsA("BillboardGui") then
+		gui = bar
+		fill = gui:FindFirstChild("Fill", true) :: Frame
+	else
+		gui = Instance.new("BillboardGui")
+		gui.Name = "DigBar"
+		gui.Size = UDim2.fromOffset(90, 12)
+		gui.StudsOffset = Vector3.new(0, 3.2, 0)
+		gui.AlwaysOnTop = true
+		gui.Parent = spot
+		local back = Instance.new("Frame")
+		back.Name = "Back"
+		back.Size = UDim2.fromScale(1, 1)
+		back.BackgroundColor3 = Color3.fromHex("#1E2A22")
+		back.BorderSizePixel = 0
+		back.Parent = gui
+		Ui.corner(back, 4)
+		fill = Instance.new("Frame")
+		fill.Name = "Fill"
+		fill.Size = UDim2.fromScale(1, 1)
+		fill.BackgroundColor3 = Color3.fromHex("#3FBF4A")
+		fill.BorderSizePixel = 0
+		fill.Parent = back
+		Ui.corner(fill, 4)
+	end
+	gui.Adornee = adornee
+	if fill then
+		fill.Size = UDim2.fromScale(math.clamp(hp / maxHp, 0, 1), 1)
+	end
+end
+
+local function watchSpot(spot: Instance)
+	if not spot:IsA("Model") or watchedSpots[spot] then
+		return
+	end
+	watchedSpots[spot] = true
+	spot:GetAttributeChangedSignal("DigHp"):Connect(function()
+		refreshBar(spot)
+	end)
+	refreshBar(spot)
+end
+
+local function watchDigSpots(folder: Instance)
+	for _, spot in folder:GetChildren() do
+		watchSpot(spot)
+	end
+	folder.ChildAdded:Connect(watchSpot)
 end
 
 local function discovery(position: Vector3, species: string, rarityId: string, luck: number?, biomeId: string?)
@@ -215,6 +282,24 @@ function Shovel.start()
 		watch(player.Character)
 	end
 	State.remote("DigResult").OnClientEvent:Connect(discovery)
+
+	local world = workspace:WaitForChild("World")
+	local biomes = world:WaitForChild("Biomes")
+	local function watchBiome(biome: Instance)
+		local spots = biome:FindFirstChild("DigSpots")
+		if spots then
+			watchDigSpots(spots)
+		end
+		biome.ChildAdded:Connect(function(child)
+			if child.Name == "DigSpots" then
+				watchDigSpots(child)
+			end
+		end)
+	end
+	for _, biome in biomes:GetChildren() do
+		watchBiome(biome)
+	end
+	biomes.ChildAdded:Connect(watchBiome)
 end
 
 return Shovel

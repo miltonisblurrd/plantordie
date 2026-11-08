@@ -82,7 +82,9 @@ local function handle(player: Player, spotId: string)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character, spot.model }
-	if workspace:Raycast(root.Position, spot.position - root.Position, params) then
+	-- Spot origin sits on the floor. Aim at the mound so the ground slab is not a hit.
+	local aim = spot.position + Vector3.new(0, 3, 0)
+	if workspace:Raycast(root.Position, aim - root.Position, params) then
 		return
 	end
 	lastDig[player] = now
@@ -101,6 +103,7 @@ local function handle(player: Player, spotId: string)
 	setAvailable(spot, false)
 	task.delay(Config.Dig.RespawnSeconds, function()
 		spot.hp = spot.maxHp
+		spot.model:SetAttribute("DigHp", spot.hp)
 		setAvailable(spot, true)
 	end)
 	Data.update(player, function(p)
@@ -119,6 +122,8 @@ function Dig.start()
 				if s.requiredTier > 1 then
 					hp = math.floor(hp * Config.Biome.ToughHpMultiplier)
 				end
+				s.model:SetAttribute("DigMaxHp", hp)
+				s.model:SetAttribute("DigHp", hp)
 				spots[s.id] = {
 					id = s.id, biomeId = biome.Id, position = s.cf.Position,
 					requiredTier = s.requiredTier, model = s.model, availableAt = 0,
