@@ -70,26 +70,20 @@ function Layout.gapAngle(biomeIndex: number): number
 	return biomeIndex
 end
 
--- Gate sits just in front of the biome entrance, facing further into the line.
+-- Gate sits in the doorway of the border the biome shares with the area before it.
 function Layout.gateCFrame(biomeIndex: number): CFrame
-	local entranceZ = Layout.biomeCenterZ(biomeIndex) - B.Size / 2 - 6
+	local entranceZ = Layout.biomeCenterZ(biomeIndex) - B.Size / 2
 	local pos = Vector3.new(0, W.GroundY, entranceZ)
 	return CFrame.lookAt(pos, pos + Vector3.new(0, 0, 1))
 end
 
-function Layout.biomePath(biomeIndex: number): { Vector3 }
-	local fromZ = if biomeIndex == 1
-		then Layout.plotFrontZ() + 6
-		else Layout.biomeCenterZ(biomeIndex - 1) + B.Size / 2
-	local toZ = Layout.biomeCenterZ(biomeIndex) - B.Size / 2
-	return {
-		Vector3.new(0, W.GroundY, fromZ),
-		Vector3.new(0, W.GroundY, toZ),
-	}
+-- Border Z between biome i-1 (or the base) and biome i.
+function Layout.borderZ(biomeIndex: number): number
+	return Layout.biomeCenterZ(biomeIndex) - B.Size / 2
 end
 
 function Layout.mapExtent(): Vector3
-	local width = (W.ArmInnerX + P.Depth + W.BaseBackGap) * 2 + 200
+	local width = math.max((W.ArmInnerX + P.Depth + W.BaseBackGap) * 2, B.Width) + 400
 	local depth = Layout.biomeCenterZ(15) + B.Size
 	return Vector3.new(width, 0, depth)
 end

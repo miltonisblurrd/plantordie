@@ -1,5 +1,5 @@
 --!strict
--- Builds the biome gates, all 15 biome areas and the trails between them; answers unlock and
+-- Builds the biome gates and all 15 biome areas, end to end with shared borders; answers unlock and
 -- region queries; and enforces locked regions on the server. Gate barriers are only a
 -- client-side convenience: the region check here is the real rule (A7).
 
@@ -91,18 +91,28 @@ local function bounce(player: Player, biome: BiomeData.Biome)
 	end
 end
 
-local function buildTrail(index: number, pal: BiomeData.Palette, parent: Instance)
-	local pts = Layout.biomePath(index)
-	local folder = Parts.model("Trail_" .. index, parent)
-	for i = 1, #pts - 1 do
-		local a, b = pts[i], pts[i + 1]
-		local mid = (a + b) / 2
-		local len = (b - a).Magnitude
-		Parts.make({
-			Name = "TrailSegment", Parent = folder, Color = pal.Ground:Lerp(Color3.fromRGB(196, 186, 168), 0.6),
-			Size = Vector3.new(B.PathWidth, 0.3, len + B.PathWidth),
-			CFrame = CFrame.lookAt(mid + Vector3.new(0, 0.05, 0), b + Vector3.new(0, 0.05, 0)),
-		})
+-- Boot-time layout checks: floors touch, every border is a wide doorway, dig spots sit on open
+-- floor. A failure warns instead of stopping the server.
+local function verifyLayout()
+	local problems: { string } = {}
+	for i = 2, BiomeData.Count do
+		local seam = (Layout.biomeCenterZ(i) - B.Size / 2) - (Layout.biomeCenterZ(i - 1) + B.Size / 2)
+		if math.abs(seam) > 0.01 then
+			table.insert(problems, `gap of {seam} studs before biome {i}`)
+		end
+	end
+	if B.Doorway < 120 or Config.World.BaseOpening < B.Doorway then
+		table.insert(problems, "doorways are narrower than 120 studs")
+	end
+	for id, info in infos do
+		for _, spot in info.skeleton.spots do
+			if not Kit.spotIsOpen(info.cf, spot.cf.Position) then
+				table.insert(problems, `{id} dig spot {spot.id} is off the open floor`)
+			end
+		end
+	end
+	if #problems > 0 then
+		warn("[Biomes] layout check: " .. table.concat(problems, "; "))
 	end
 end
 
@@ -113,22 +123,25 @@ function Biomes.start(worldFolder: Instance)
 	local biomeFolder = Instance.new("Folder")
 	biomeFolder.Name = "Biomes"
 	biomeFolder.Parent = worldFolder
-	local trailFolder = Instance.new("Folder")
-	trailFolder.Name = "Trails"
-	trailFolder.Parent = worldFolder
 
 	local builders = script.Parent.World.Builders.Biomes
 	for _, b in BiomeData.List do
 		gates[b.Id] = Gate.build(b, Layout.gateCFrame(b.Index), gateFolder)
 		local cf = Layout.biomeCFrame(b.Index)
+		local before = Parts.count()
 		local ctx = Kit.newCtx(b, cf, biomeFolder)
 		local builderModule = builders:FindFirstChild(b.Id)
 		assert(builderModule and builderModule:IsA("ModuleScript"), "Missing biome builder " .. b.Id)
 		local build = (require :: any)(builderModule) :: (Kit.Ctx) -> ()
 		build(ctx)
 		infos[b.Id] = { biome = b, cf = cf, model = ctx.model, skeleton = Kit.skeleton(ctx) }
-		buildTrail(b.Index, b.Palette, trailFolder)
+		local used = Parts.count() - before
+		ctx.model:SetAttribute("PartCount", used)
+		if used > Kit.PART_BUDGET then
+			warn(`[Biomes] {b.Id} uses {used} parts (budget {Kit.PART_BUDGET})`)
+		end
 	end
+	verifyLayout()
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastBounce[player] = nil

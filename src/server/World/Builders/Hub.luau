@@ -151,7 +151,7 @@ function Hub.build(parent: Instance): Model
 	line.CastShadow = false
 	local sign = Parts.make({
 		Name = "SafeZoneSign", Parent = m, Color = Color3.fromHex("#1E2A22"),
-		Size = Vector3.new(10, 2.4, 0.4), CFrame = CFrame.new(Config.Biome.PathWidth / 2 + 7, W.GroundY + 4, maxZ),
+		Size = Vector3.new(10, 2.4, 0.4), CFrame = CFrame.new(Config.Biome.Doorway / 2 + 7, W.GroundY + 4, maxZ),
 	})
 	Parts.surfaceText(sign, Enum.NormalId.Back, "SAFE ZONE", Color3.fromHex("#3FBF4A"))
 	Parts.surfaceText(sign, Enum.NormalId.Front, "SAFE ZONE", Color3.fromHex("#3FBF4A"))

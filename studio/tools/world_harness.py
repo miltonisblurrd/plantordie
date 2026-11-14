@@ -51,6 +51,7 @@ CF.__index = function(c, k)
 	if k == "Z" then return c.Position.Z end
 	if k == "PointToObjectSpace" then return function(self, v) return v - self.Position end end
 	if k == "PointToWorldSpace" then return function(self, v) return v + self.Position end end
+	if k == "ToObjectSpace" then return function(self, o) return cf(o.Position - self.Position) end end
 	if k == "LookVector" then return Vector3.new(0, 0, -1) end
 	return nil
 end
@@ -124,6 +125,8 @@ end
 local methods = {}
 function methods:SetAttribute(k, v) self._attrs[k] = v end
 function methods:GetAttribute(k) return self._attrs[k] end
+function methods:AddTag() end
+function methods:HasTag() return false end
 function methods:FindFirstChild(n)
 	for _, c in self._children do if c.Name == n then return c end end
 	return nil
@@ -251,12 +254,22 @@ local gates = delta(function()
 	for _, b in Biomes.List do Gate.build(b, Layout.gateCFrame(b.Index), world) end
 end)
 print(("15 gates: %d"):format(gates))
-local biomeTotal, trailTotal, spotTotal, minGap = 0, 0, 0, math.huge
+local biomeTotal, spotTotal, minGap, coreChecked = 0, 0, math.huge, 0
 for _, b in Biomes.List do
 	local skeletonParts, spots
 	local n = delta(function()
 		local ctx = Kit.newCtx(b, Layout.biomeCFrame(b.Index), world)
 		require(Server.World.Builders.Biomes[b.Id])(ctx)
+		-- Colliding scenery stays out of the open core (stub drops rotation, so allow some slack).
+		local centerZ = Layout.biomeCenterZ(b.Index)
+		for _, d in ctx.props:GetDescendants() do
+			if d.CanCollide == true and d.CFrame then
+				local pos = d.CFrame.Position
+				coreChecked += 1
+				assert(math.abs(pos.X) >= Kit.CORE_HALF - 14 or pos.Y > 12,
+					("%s: colliding %s at x=%.0f z=%.0f is inside the open core"):format(b.Id, d.Name, pos.X, pos.Z - centerZ))
+			end
+		end
 		skeletonParts = delta(function()
 			local list = Kit.skeleton(ctx).spots
 			spots = #list
@@ -277,11 +290,21 @@ for _, b in Biomes.List do
 	biomeTotal += n + g
 	print(("  %-17s %4d parts (terrain+props %d, skeleton %d, %d dig spots), guardian %d"):format(b.Id, n + g, n - skeletonParts, skeletonParts, spots, g))
 end
-trailTotal = (#Layout.biomePath(1) - 1) * #Biomes.List
 print(("15 biomes incl. guardians: %d"):format(biomeTotal))
 print(("Dig spots: %d (closest pair in any biome %.1f studs, need >= 8)"):format(spotTotal, minGap))
-print(("Trails: %d segments"):format(trailTotal))
-print(("World total at boot: ~%d parts (+ planted plant models at runtime)"):format(Parts.count() + trailTotal))
+print(("Open core: %d colliding scenery parts checked, none inside the middle %d studs"):format(coreChecked, math.floor(Kit.CORE_HALF * 2)))
+do
+	local B = Config.Biome
+	for i = 2, #Biomes.List do
+		local seam = (Layout.biomeCenterZ(i) - B.Size / 2) - (Layout.biomeCenterZ(i - 1) + B.Size / 2)
+		assert(math.abs(seam) < 1e-6, ("gap of %.2f studs before biome %d"):format(seam, i))
+	end
+	local base = Config.Plot.Depth / 2 + B.FrontGap
+	assert(base == Config.World.BaseFrontZ + 4, "biome 1 starts at the base front wall's outer face")
+	assert(B.Doorway >= 120 and Config.World.BaseOpening >= B.Doorway, "doorways at least 120 studs")
+	print(("Layout: 15 biomes %dx%d, floors touch (0 gaps), doorways %d studs, base opening %d"):format(B.Width, B.Size, B.Doorway, Config.World.BaseOpening))
+end
+print(("World total at boot: ~%d parts (+ planted plant models at runtime)"):format(Parts.count()))
 print(("Halloween decor (only while the event is active): %d"):format(delta(function()
 	require(Server.World.Builders.Events.Halloween).build(world)
 end)))
@@ -796,7 +819,7 @@ do
 	local function refRegion(pos)
 		for _, b in Biomes.List do
 			local lp = pos - Vector3.new(0, W.GroundY, refCenterZ(b.Index))
-			local halfX, halfZ = B.Width / 2 + 1, B.Size / 2 + 1
+			local halfX, halfZ = B.Width / 2 + 1, B.Size / 2
 			if math.abs(lp.X) <= halfX and math.abs(lp.Z) <= halfZ and lp.Y > -20 and lp.Y < 120 then return b.Id end
 		end
 		return nil
@@ -817,7 +840,7 @@ do
 	for _, b in Biomes.List do
 		local cz = refCenterZ(b.Index)
 		assert(Layout.biomeCenterZ(b.Index) == cz and Layout.biomeCFrame(b.Index).Position.Z == cz)
-		local hx, hz = B.Width / 2 + 1, B.Size / 2 + 1
+		local hx, hz = B.Width / 2 + 1, B.Size / 2
 		for _, dz in { -hz, -hz + 0.5, -hz + 1, -hz + 2, -30, 0, 30, hz - 2, hz - 1, hz - 0.5, hz } do
 			for _, dx in { -hx, -hx + 1, -hx + 2, 0, hx - 2, hx - 1, hx } do
 				for _, dy in { -21, -19, 0, 3, 119, 121 } do
@@ -826,10 +849,10 @@ do
 			end
 		end
 		local p = Vector3.new(0, W.GroundY + 3, cz)
-		assert(math.abs(BiomeRegions.distanceInside(b.Id, p) - math.min(B.Width / 2 + 1, B.Size / 2 + 1, 3 + 20)) < 1e-6, "Y band is an edge")
+		assert(math.abs(BiomeRegions.distanceInside(b.Id, p) - math.min(B.Width / 2 + 1, B.Size / 2, 3 + 20)) < 1e-6, "Y band is an edge")
 		assert(math.abs(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, hz - 0.5)) - 0.5) < 1e-6, "hysteresis band")
 		assert(BiomeRegions.distanceInside(b.Id, p + Vector3.new(0, 0, hz + 1)) < 0)
-		if b.Index > 1 then
+		if b.Index > 1 and B.Gap > 0 then
 			check(Vector3.new(0, W.GroundY + 3, cz - B.Size / 2 - B.Gap / 2), true) -- trail gap
 		end
 		assert(BiomeRegions.safeCenter == nil and BiomesSrv.inSafeZone == nil, "no per-biome safe zone API")

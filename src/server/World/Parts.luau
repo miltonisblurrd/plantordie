@@ -20,6 +20,8 @@ export type Props = {
 	Wedge: boolean?,
 	CanCollide: boolean?,
 	Transparency: number?,
+	CastShadow: boolean?,
+	Decor: boolean?, -- no queries or touches; raycasts, dig checks and pathing ignore it
 	Parent: Instance,
 }
 
@@ -42,7 +44,11 @@ function Parts.make(p: Props): BasePart
 	part.Transparency = p.Transparency or 0
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.CastShadow = true
+	part.CastShadow = if p.CastShadow == nil then true else p.CastShadow
+	if p.Decor then
+		part.CanQuery = false
+		part.CanTouch = false
+	end
 	part.Parent = p.Parent
 	made += 1
 	return part

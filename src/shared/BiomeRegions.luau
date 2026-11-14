@@ -10,7 +10,7 @@ local B = Config.Biome
 local P = Config.Plot
 
 local HALF_X = B.Width / 2 + 1
-local HALF_Z = B.Size / 2 + 1
+local HALF_Z = B.Size / 2 -- neighbours share a border, so no overlap
 local MIN_Y, MAX_Y = -20, 120
 
 local BiomeRegions = {}

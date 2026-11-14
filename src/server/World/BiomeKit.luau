@@ -1,9 +1,13 @@
 --!strict
--- Template helpers for biome builders. A builder only adds terrain and props; the kit builds
--- the shared skeleton (floor, walls with an entrance, dig spots, patrol points, danger zones)
--- so every biome plays the same way and stays inside the part budget. Biomes are never safe;
--- the only Safe Zone is the shared home area (Shared/SafeZone).
--- Coordinates are biome-local: X across, Z from entrance (-Size/2) to back (+Size/2).
+-- Template helpers for biome builders. A builder adds ground detail, scenery and landmarks; the
+-- kit builds the shared skeleton (floor, layered walls, shared border, dig spots, patrol points,
+-- danger zones) so every biome plays the same way and stays inside the part budget. Biomes are
+-- never safe; the only Safe Zone is the shared home area (Shared/SafeZone).
+-- Coordinates are biome-local: X across, Z from entrance (-length/2) to back (+length/2).
+--
+-- Zones: the core is the middle CoreFraction of the width, full length. It holds dig spots,
+-- guardian patrols and only non-colliding ground decor. Everything large sits in the side bands
+-- between the core and the walls, against the walls, or outside them.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -12,23 +16,33 @@ local Config = require(ReplicatedStorage.Shared.Config)
 local Parts = require(script.Parent.Parts)
 
 local B = Config.Biome
-local WALL_H = Config.World.BaseWallHeight
-local ENTRANCE_W = 52
-local DESIGN_SIZE = 56 -- builders' scatter counts were tuned for this biome size
-local SCATTER_CAP = 2 -- full area scale (4x at 112) blows the boot part budget
-local SPOT_GAP = 8
-local ENTRANCE_CLEAR = 10 -- radius kept free of props and dig spots just inside the entrance
+local WALL_H = B.WallHeight
+local DOOR_HALF = B.Doorway / 2
+local CORE_HALF = B.Width * B.CoreFraction / 2
+local SPOT_GAP = 20
+local SPOT_PROP_CLEAR = 6 -- extra studs between a dig spot and any registered prop footprint
+local ENTRY_CLEAR = 30 -- no dig spots this close to the entrance border
+local MAX_LIGHTS = 6
+local FLOOR_TOP = 0.1
+
+local Kit = {}
+Kit.PART_BUDGET = 900
+Kit.CORE_HALF = CORE_HALF
+Kit.FLOOR_TOP = FLOOR_TOP
 
 export type Ctx = {
 	biome: BiomeData.Biome,
 	cf: CFrame,
-	size: number, -- length, kept so older builder calls still read a span
+	size: number,
 	width: number,
 	length: number,
 	model: Model,
 	props: Model,
 	rng: Random,
 	pal: BiomeData.Palette,
+	occupied: { { x: number, z: number, r: number } },
+	deco: boolean, -- while true, parts are non-colliding, unqueryable and shadowless
+	lights: number,
 }
 
 export type DigSpot = { id: string, cf: CFrame, requiredTier: number, model: Model }
@@ -38,28 +52,35 @@ export type Skeleton = {
 	spots: { DigSpot },
 }
 
-local Kit = {}
-
 local function part(ctx: Ctx, name: string, size: Vector3, cf: CFrame, color: Color3, opts: { [string]: any }?): BasePart
 	local o: { [string]: any } = opts or {}
+	local deco = ctx.deco or o.Decor == true
 	return Parts.make({
 		Name = name, Parent = o.Parent or ctx.props, Size = size, CFrame = cf, Color = color,
-		Material = o.Material, Shape = o.Shape, Wedge = o.Wedge, CanCollide = o.CanCollide,
+		Material = o.Material, Shape = o.Shape, Wedge = o.Wedge,
+		CanCollide = if deco then false else o.CanCollide,
 		Transparency = o.Transparency,
+		CastShadow = if o.Shadow ~= nil then o.Shadow elseif deco then false else nil,
+		Decor = deco,
 	})
 end
 Kit.part = part
 
-local BALL = Enum.PartType.Ball
-local CYL = Enum.PartType.Cylinder
 local NEON = Enum.Material.Neon
-local UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinders point along X; this stands them up
+local CYL = Enum.PartType.Cylinder
+Kit.UPRIGHT = CFrame.Angles(0, 0, math.rad(90)) -- cylinders point along X; this stands them up
+local UPRIGHT = Kit.UPRIGHT
 
 function Kit.at(ctx: Ctx, x: number, z: number, yaw: number?): CFrame
-	local limX, limZ = ctx.width / 2 - 4, ctx.length / 2 - 4
-	x = math.clamp(x, -limX, limX)
-	z = math.clamp(z, -limZ, limZ)
 	return ctx.cf * CFrame.new(x, 0, z) * CFrame.Angles(0, yaw or 0, 0)
+end
+
+-- Runs `fn` with deco mode on: everything it builds is walk-through ground dressing.
+function Kit.decor(ctx: Ctx, fn: () -> ())
+	local was = ctx.deco
+	ctx.deco = true
+	fn()
+	ctx.deco = was
 end
 
 function Kit.newCtx(biome: BiomeData.Biome, cf: CFrame, parent: Instance): Ctx
@@ -71,217 +92,282 @@ function Kit.newCtx(biome: BiomeData.Biome, cf: CFrame, parent: Instance): Ctx
 	return {
 		biome = biome, cf = cf, size = B.Size, width = B.Width, length = B.Size,
 		model = model, props = props, rng = Random.new(biome.Index * 7919), pal = biome.Palette,
+		occupied = {}, deco = false, lights = 0,
 	}
 end
 
--- Keeps props off the entrance lane, the entrance clearing and the walls.
-function Kit.isClear(ctx: Ctx, x: number, z: number, margin: number): boolean
-	if math.abs(x) > ctx.width / 2 - margin or math.abs(z) > ctx.length / 2 - margin then
-		return false
-	end
-	local clearZ = -ctx.length / 2 + ENTRANCE_CLEAR + 6
-	if (Vector2.new(x, z) - Vector2.new(0, clearZ)).Magnitude < ENTRANCE_CLEAR + 10 then
-		return false
-	end
-	local lane = ENTRANCE_W / 2
-	if math.abs(x) < lane and z < -ctx.length / 2 + 18 then
-		return false
-	end
-	return not (ctx.biome.Index < BiomeData.Count and math.abs(x) < lane and z > ctx.length / 2 - 18)
+-- Placement ----------------------------------------------------------------------------------
+
+function Kit.reserve(ctx: Ctx, x: number, z: number, r: number)
+	table.insert(ctx.occupied, { x = x, z = z, r = r })
 end
 
-function Kit.randomPoint(ctx: Ctx, margin: number): (number, number)
-	for _ = 1, 40 do
-		local x = ctx.rng:NextNumber(-ctx.width / 2, ctx.width / 2)
-		local z = ctx.rng:NextNumber(-ctx.length / 2, ctx.length / 2)
-		local onEdge = math.abs(x) > ctx.width * 0.28 or math.abs(z) > ctx.length * 0.34
-		if (onEdge or ctx.rng:NextNumber() < 0.12) and Kit.isClear(ctx, x, z, margin) then
+function Kit.isFree(ctx: Ctx, x: number, z: number, r: number): boolean
+	for _, o in ctx.occupied do
+		local dx, dz = o.x - x, o.z - z
+		if dx * dx + dz * dz < (o.r + r) ^ 2 then
+			return false
+		end
+	end
+	return true
+end
+
+local function inBand(ctx: Ctx, x: number, z: number, r: number): boolean
+	local ax = math.abs(x)
+	return ax >= CORE_HALF + r * 0.5 and ax <= ctx.width / 2 - 4 - r and math.abs(z) <= ctx.length / 2 - 4 - r
+end
+
+-- A free point in a side band (between the open core and the side walls), or nil.
+function Kit.edgePoint(ctx: Ctx, r: number, side: number?): (number?, number?)
+	for _ = 1, 30 do
+		local s = side or (if ctx.rng:NextNumber() < 0.5 then -1 else 1)
+		local lo, hi = CORE_HALF + r * 0.5, ctx.width / 2 - 4 - r
+		if hi < lo then
+			return nil, nil
+		end
+		local x = s * ctx.rng:NextNumber(lo, hi)
+		local z = ctx.rng:NextNumber(-ctx.length / 2 + 4 + r, ctx.length / 2 - 4 - r)
+		if Kit.isFree(ctx, x, z, r) then
 			return x, z
 		end
 	end
-	return 0, 0
+	return nil, nil
 end
 
-function Kit.scatter(ctx: Ctx, count: number, margin: number, fn: (CFrame, Random, number) -> ())
-	local scale = math.min((ctx.length / DESIGN_SIZE) * (ctx.width / DESIGN_SIZE), SCATTER_CAP)
-	for i = 1, math.round(count * scale) do
-		local x, z = Kit.randomPoint(ctx, margin)
-		fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
+-- Big scenery in the side bands. `r` is the footprint radius kept clear of other props.
+function Kit.edgeScatter(ctx: Ctx, count: number, r: number, fn: (CFrame, Random, number) -> ())
+	for i = 1, count do
+		local x, z = Kit.edgePoint(ctx, r)
+		if x and z then
+			Kit.reserve(ctx, x, z, r)
+			fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
+		end
 	end
 end
 
--- Floor + side walls + an entrance wall with a gap facing the hub. The back wall has a matching
--- exit gap onto the trail to the next biome, except in the last biome.
--- Wall body, wall material, cap colour, cap material. The colours tell the player which biome
--- they are in at a glance, so each one is bold and matches the biome's plants.
-type WallLook = { body: Color3, mat: Enum.Material, cap: Color3, capMat: Enum.Material }
-local GRASS_MAT, SMOOTH, NEON_MAT = Enum.Material.Grass, Enum.Material.SmoothPlastic, Enum.Material.Neon
-local WALL_LOOKS: { [string]: WallLook } = {
-	GreenMeadows = { body = Color3.fromRGB(214, 118, 108), mat = SMOOTH, cap = Color3.fromRGB(98, 200, 72), capMat = GRASS_MAT },
-	MushroomForest = { body = Color3.fromRGB(110, 70, 150), mat = SMOOTH, cap = Color3.fromRGB(255, 77, 77), capMat = SMOOTH },
-	CactusCanyon = { body = Color3.fromRGB(222, 150, 80), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(63, 163, 77), capMat = GRASS_MAT },
-	InfernoJungle = { body = Color3.fromRGB(34, 28, 30), mat = Enum.Material.Basalt, cap = Color3.fromRGB(255, 90, 31), capMat = NEON_MAT },
-	FrostbiteGarden = { body = Color3.fromRGB(150, 205, 245), mat = Enum.Material.Ice, cap = Color3.fromRGB(245, 250, 255), capMat = Enum.Material.Snow },
-	EnchantedGrove = { body = Color3.fromRGB(90, 62, 133), mat = SMOOTH, cap = Color3.fromRGB(124, 255, 203), capMat = NEON_MAT },
-	TropicalParadise = { body = Color3.fromRGB(0, 170, 150), mat = SMOOTH, cap = Color3.fromRGB(247, 225, 160), capMat = Enum.Material.Sand },
-	CoralKingdom = { body = Color3.fromRGB(42, 130, 220), mat = SMOOTH, cap = Color3.fromRGB(255, 127, 80), capMat = SMOOTH },
-	AutumnWoods = { body = Color3.fromRGB(160, 80, 30), mat = SMOOTH, cap = Color3.fromRGB(255, 140, 0), capMat = SMOOTH },
-	SkyIslands = { body = Color3.fromRGB(142, 201, 255), mat = SMOOTH, cap = Color3.fromRGB(255, 255, 255), capMat = SMOOTH },
-	CrystalCaverns = { body = Color3.fromRGB(45, 45, 70), mat = Enum.Material.Slate, cap = Color3.fromRGB(92, 225, 230), capMat = NEON_MAT },
-	ToxicSwamp = { body = Color3.fromRGB(60, 75, 35), mat = Enum.Material.Mud, cap = Color3.fromRGB(166, 255, 0), capMat = NEON_MAT },
-	AncientWilds = { body = Color3.fromRGB(176, 150, 110), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(106, 153, 78), capMat = GRASS_MAT },
-	CosmicGarden = { body = Color3.fromRGB(40, 20, 80), mat = SMOOTH, cap = Color3.fromRGB(180, 120, 255), capMat = NEON_MAT },
-	ForbiddenBloom = { body = Color3.fromRGB(43, 10, 18), mat = Enum.Material.Slate, cap = Color3.fromRGB(255, 30, 86), capMat = NEON_MAT },
-}
-
-local function wall(ctx: Ctx, name: string, size: Vector3, cf: CFrame, look: WallLook)
-	local body = part(ctx, name, size, cf, look.body, { Parent = ctx.model, Material = look.mat })
-	local capH = 2
-	part(ctx, name .. "Cap", Vector3.new(size.X + 0.6, capH, size.Z + 0.6), cf * CFrame.new(0, size.Y / 2 + capH / 2, 0), look.cap,
-		{ Parent = ctx.model, Material = look.capMat })
-	return body
+-- Groups of scenery: a few anchors in the side bands, members packed loosely around each.
+function Kit.clusters(ctx: Ctx, groups: number, perGroup: number, r: number, spread: number, fn: (CFrame, Random, number) -> ())
+	local n = 0
+	for _ = 1, groups do
+		local cx, cz = Kit.edgePoint(ctx, r)
+		if cx and cz then
+			for _ = 1, perGroup do
+				for _ = 1, 8 do
+					local x = cx + ctx.rng:NextNumber(-spread, spread)
+					local z = cz + ctx.rng:NextNumber(-spread, spread)
+					if inBand(ctx, x, z, r) and Kit.isFree(ctx, x, z, r) then
+						Kit.reserve(ctx, x, z, r)
+						n += 1
+						fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, n)
+						break
+					end
+				end
+			end
+		end
+	end
 end
 
+-- A row hugging both side walls, with jittered spacing, so the wall foot reads as planted.
+function Kit.wallRow(ctx: Ctx, spacing: number, r: number, fn: (CFrame, Random, number) -> ())
+	local n = 0
+	for _, side in { -1, 1 } do
+		local z = -ctx.length / 2 + r + 6
+		while z < ctx.length / 2 - r - 4 do
+			local x = side * (ctx.width / 2 - 4 - r - ctx.rng:NextNumber(0, 6))
+			if Kit.isFree(ctx, x, z, r) then
+				Kit.reserve(ctx, x, z, r)
+				n += 1
+				fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, n)
+			end
+			z += spacing * ctx.rng:NextNumber(0.75, 1.3)
+		end
+	end
+end
+
+-- Landmark slot in a side band. `t` runs -1 (entrance) to 1 (back). Reserves the footprint.
+function Kit.landmark(ctx: Ctx, side: number, t: number, r: number): CFrame
+	local x = side * math.max(CORE_HALF + r * 0.6, ctx.width / 2 - 6 - r)
+	local z = math.clamp(t * ctx.length / 2, -ctx.length / 2 + r + 6, ctx.length / 2 - r - 6)
+	Kit.reserve(ctx, x, z, r)
+	return Kit.at(ctx, x, z, if side < 0 then math.pi / 2 else -math.pi / 2)
+end
+
+-- Small walk-through dressing anywhere on the floor, the core included.
+function Kit.coreScatter(ctx: Ctx, count: number, fn: (CFrame, Random, number) -> ())
+	Kit.decor(ctx, function()
+		for i = 1, count do
+			for _ = 1, 10 do
+				local x = ctx.rng:NextNumber(-ctx.width / 2 + 8, ctx.width / 2 - 8)
+				local z = ctx.rng:NextNumber(-ctx.length / 2 + 8, ctx.length / 2 - 8)
+				if Kit.isFree(ctx, x, z, 3) then
+					Kit.reserve(ctx, x, z, 2)
+					fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
+					break
+				end
+			end
+		end
+	end)
+end
+
+-- Silhouettes just outside the side walls: depth for the skyline, nothing to walk into.
+function Kit.outside(ctx: Ctx, count: number, fn: (CFrame, Random, number) -> ())
+	Kit.decor(ctx, function()
+		for i = 1, count do
+			local side = if i % 2 == 0 then -1 else 1
+			local x = side * (ctx.width / 2 + ctx.rng:NextNumber(14, 70))
+			local z = ctx.rng:NextNumber(-ctx.length / 2, ctx.length / 2)
+			fn(Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi * 2)), ctx.rng, i)
+		end
+	end)
+end
+
+function Kit.light(ctx: Ctx, host: BasePart, color: Color3, range: number?, brightness: number?)
+	if ctx.lights >= MAX_LIGHTS then
+		return
+	end
+	ctx.lights += 1
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = range or 18
+	light.Brightness = brightness or 1.2
+	light.Shadows = false
+	light.Parent = host
+end
+
+-- Lighting the client blends to while the player is in this biome (client/Atmosphere).
+export type Mood = {
+	haze: Color3, -- Atmosphere.Color
+	decay: Color3, -- Atmosphere.Decay
+	density: number,
+	tint: Color3?,
+	saturation: number?,
+	contrast: number?,
+	brightness: number?,
+}
+
+function Kit.mood(ctx: Ctx, m: Mood)
+	local model = ctx.model
+	model:SetAttribute("AtmoColor", m.haze)
+	model:SetAttribute("AtmoDecay", m.decay)
+	model:SetAttribute("AtmoDensity", m.density)
+	model:SetAttribute("Tint", m.tint or Color3.new(1, 1, 1))
+	model:SetAttribute("Saturation", m.saturation or 0.1)
+	model:SetAttribute("Contrast", m.contrast or 0.05)
+	model:SetAttribute("Brightness", m.brightness or 0)
+end
+
+-- Ground ---------------------------------------------------------------------------------------
+
+-- Flat, walk-through ground patches (discs) laid over the floor. Overlaps stagger in height.
+function Kit.patches(ctx: Ctx, count: number, minR: number, maxR: number, colors: { Color3 }, material: Enum.Material?, coreOnly: boolean?)
+	Kit.decor(ctx, function()
+		for i = 1, count do
+			local r = ctx.rng:NextNumber(minR, maxR)
+			local limX = if coreOnly then CORE_HALF - r * 0.5 else ctx.width / 2 - r * 0.6
+			local x = ctx.rng:NextNumber(-limX, limX)
+			local z = ctx.rng:NextNumber(-ctx.length / 2 + r * 0.6, ctx.length / 2 - r * 0.6)
+			local y = FLOOR_TOP + 0.02 + (i % 7) * 0.012
+			local c = colors[(i - 1) % #colors + 1]
+			local stretch = ctx.rng:NextNumber(0.6, 1)
+			part(ctx, "GroundPatch", Vector3.new(0.1, r * 2, r * 2 * stretch),
+				Kit.at(ctx, x, z, ctx.rng:NextNumber(0, math.pi)) * CFrame.new(0, y, 0) * UPRIGHT, c,
+				{ Shape = CYL, Material = material, Parent = ctx.model })
+		end
+	end)
+end
+
+-- Low rounded rise against the walls. Never in the core.
+function Kit.mound(ctx: Ctx, cf: CFrame, w: number, h: number, color: Color3, material: Enum.Material?)
+	part(ctx, "Mound", Vector3.new(w, h * 2, w * 0.8), cf, color, { Shape = Enum.PartType.Ball, Material = material or Enum.Material.Grass })
+end
+
+type WallLook = { body: Color3, mat: Enum.Material, cap: Color3, capMat: Enum.Material, trim: Color3? }
+local GRASS_MAT, SMOOTH = Enum.Material.Grass, Enum.Material.SmoothPlastic
+local WALL_LOOKS: { [string]: WallLook } = {
+	GreenMeadows = { body = Color3.fromRGB(196, 128, 96), mat = Enum.Material.Cobblestone, cap = Color3.fromRGB(98, 200, 72), capMat = GRASS_MAT, trim = Color3.fromRGB(150, 98, 70) },
+	MushroomForest = { body = Color3.fromRGB(96, 66, 132), mat = Enum.Material.Slate, cap = Color3.fromRGB(255, 77, 77), capMat = SMOOTH, trim = Color3.fromRGB(255, 243, 224) },
+	CactusCanyon = { body = Color3.fromRGB(214, 140, 76), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(236, 190, 120), capMat = Enum.Material.Sandstone, trim = Color3.fromRGB(176, 96, 52) },
+	InfernoJungle = { body = Color3.fromRGB(34, 28, 30), mat = Enum.Material.Basalt, cap = Color3.fromRGB(255, 90, 31), capMat = NEON, trim = Color3.fromRGB(90, 30, 18) },
+	FrostbiteGarden = { body = Color3.fromRGB(150, 205, 245), mat = Enum.Material.Glacier, cap = Color3.fromRGB(245, 250, 255), capMat = Enum.Material.Snow, trim = Color3.fromRGB(110, 170, 225) },
+	EnchantedGrove = { body = Color3.fromRGB(70, 82, 64), mat = Enum.Material.Cobblestone, cap = Color3.fromRGB(70, 150, 80), capMat = GRASS_MAT, trim = Color3.fromRGB(124, 255, 203) },
+	TropicalParadise = { body = Color3.fromRGB(226, 200, 150), mat = Enum.Material.Sandstone, cap = Color3.fromRGB(45, 170, 79), capMat = GRASS_MAT, trim = Color3.fromRGB(0, 170, 150) },
+	CoralKingdom = { body = Color3.fromRGB(36, 110, 190), mat = Enum.Material.Pebble, cap = Color3.fromRGB(255, 127, 80), capMat = SMOOTH, trim = Color3.fromRGB(255, 209, 220) },
+	AutumnWoods = { body = Color3.fromRGB(120, 90, 70), mat = Enum.Material.Cobblestone, cap = Color3.fromRGB(230, 120, 30), capMat = GRASS_MAT, trim = Color3.fromRGB(110, 62, 38) },
+	SkyIslands = { body = Color3.fromRGB(235, 242, 255), mat = SMOOTH, cap = Color3.fromRGB(150, 230, 110), capMat = GRASS_MAT, trim = Color3.fromRGB(142, 201, 255) },
+	CrystalCaverns = { body = Color3.fromRGB(45, 45, 70), mat = Enum.Material.Slate, cap = Color3.fromRGB(92, 225, 230), capMat = NEON, trim = Color3.fromRGB(255, 102, 196) },
+	ToxicSwamp = { body = Color3.fromRGB(60, 72, 38), mat = Enum.Material.Mud, cap = Color3.fromRGB(166, 255, 0), capMat = NEON, trim = Color3.fromRGB(40, 48, 26) },
+	AncientWilds = { body = Color3.fromRGB(176, 158, 120), mat = Enum.Material.Limestone, cap = Color3.fromRGB(106, 153, 78), capMat = GRASS_MAT, trim = Color3.fromRGB(140, 120, 90) },
+	CosmicGarden = { body = Color3.fromRGB(36, 20, 74), mat = Enum.Material.Slate, cap = Color3.fromRGB(180, 120, 255), capMat = NEON, trim = Color3.fromRGB(76, 201, 240) },
+	ForbiddenBloom = { body = Color3.fromRGB(43, 10, 18), mat = Enum.Material.Slate, cap = Color3.fromRGB(255, 30, 86), capMat = NEON, trim = Color3.fromRGB(255, 215, 0) },
+}
+
+-- One wall run from local (x0, z0) to (x1, z1) along a single axis: plinth, body, trim band,
+-- cap, and buttresses that break the skyline. `inward` is the local direction facing the floor.
+local function wallRun(ctx: Ctx, name: string, x0: number, z0: number, x1: number, z1: number, inward: Vector3, look: WallLook)
+	local alongX = math.abs(x1 - x0) > math.abs(z1 - z0)
+	local len = if alongX then math.abs(x1 - x0) else math.abs(z1 - z0)
+	if len < 1 then
+		return
+	end
+	local mid = ctx.cf * CFrame.new((x0 + x1) / 2, 0, (z0 + z1) / 2)
+	local function box(thick: number, h: number, y: number): Vector3
+		return if alongX then Vector3.new(len, h, thick) else Vector3.new(thick, h, len)
+	end
+	local opts = { Parent = ctx.model, Material = look.mat }
+	local trim = look.trim or look.body:Lerp(Color3.new(0, 0, 0), 0.3)
+	part(ctx, name .. "Plinth", box(7, 5, 0), mid * CFrame.new(0, 2.5, 0), look.body:Lerp(Color3.new(0, 0, 0), 0.25), opts)
+	part(ctx, name, box(4, WALL_H, 0), mid * CFrame.new(0, WALL_H / 2, 0), look.body, opts)
+	part(ctx, name .. "Trim", box(4.8, 2, 0), mid * CFrame.new(0, WALL_H * 0.62, 0), trim, { Parent = ctx.model, Material = SMOOTH, Shadow = false })
+	part(ctx, name .. "Cap", box(6, 2.5, 0), mid * CFrame.new(0, WALL_H + 1.25, 0), look.cap, { Parent = ctx.model, Material = look.capMat })
+	local count = math.max(1, math.floor(len / 38))
+	for i = 0, count do
+		local t = -len / 2 + i * len / count
+		local offset = if alongX then Vector3.new(t, 0, 0) else Vector3.new(0, 0, t)
+		local h = WALL_H + (if i % 2 == 0 then 8 else 3)
+		local base = mid * CFrame.new(offset + inward * 2.5)
+		part(ctx, name .. "Buttress", Vector3.new(8, h, 8), base * CFrame.new(0, h / 2, 0), look.body:Lerp(trim, 0.35), opts)
+		part(ctx, name .. "ButtressCap", Vector3.new(9.5, 2.5, 9.5), base * CFrame.new(0, h + 1.25, 0), look.cap,
+			{ Parent = ctx.model, Material = look.capMat, Shadow = false })
+	end
+end
+
+-- Floor, layered side walls, the shared entrance border (stubs either side of the doorway, ground
+-- seam strip) and, in the last biome only, a closed back wall. Every other back edge is the next
+-- biome's entrance border, so there is exactly one border between any two biomes.
 function Kit.ground(ctx: Ctx, color: Color3?, material: Enum.Material?)
 	local w, len = ctx.width, ctx.length
-	local floor = part(ctx, "Floor", Vector3.new(w, 1, len), ctx.cf * CFrame.new(0, -0.4, 0), color or ctx.pal.Ground,
+	local floor = part(ctx, "Floor", Vector3.new(w, 1, len), ctx.cf * CFrame.new(0, FLOOR_TOP - 0.5, 0), color or ctx.pal.Ground,
 		{ Material = material or Enum.Material.Grass, Parent = ctx.model })
 	floor:SetAttribute("BiomeFloor", true)
 	local look = WALL_LOOKS[ctx.biome.Id] or WALL_LOOKS.GreenMeadows
-	wall(ctx, "WallLeft", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(-w / 2, WALL_H / 2, 0), look)
-	wall(ctx, "WallRight", Vector3.new(2, WALL_H, len), ctx.cf * CFrame.new(w / 2, WALL_H / 2, 0), look)
-	local seg = (w - ENTRANCE_W) / 2
-	for _, side in { -1, 1 } do
-		wall(ctx, "WallFront", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, -len / 2), look)
+	wallRun(ctx, "WallLeft", -w / 2, -len / 2, -w / 2, len / 2, Vector3.new(1, 0, 0), look)
+	wallRun(ctx, "WallRight", w / 2, -len / 2, w / 2, len / 2, Vector3.new(-1, 0, 0), look)
+
+	-- The base front wall already closes the sides of biome 1's entrance.
+	if ctx.biome.Index > 1 then
+		wallRun(ctx, "BorderLeft", -w / 2, -len / 2, -DOOR_HALF - 4, -len / 2, Vector3.new(0, 0, 1), look)
+		wallRun(ctx, "BorderRight", DOOR_HALF + 4, -len / 2, w / 2, -len / 2, Vector3.new(0, 0, 1), look)
 	end
-	local arch = part(ctx, "EntranceSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
-		ctx.cf * CFrame.new(0, WALL_H + 4, -len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })
-	Parts.surfaceText(arch, Enum.NormalId.Back, ctx.biome.Name, ctx.pal.Accent1)
-	Parts.surfaceText(arch, Enum.NormalId.Front, ctx.biome.Name, ctx.pal.Accent1)
-	local nextBiome = BiomeData.List[ctx.biome.Index + 1]
-	if ctx.biome.Index >= BiomeData.Count or not nextBiome then
-		wall(ctx, "WallBack", Vector3.new(w, WALL_H, 2), ctx.cf * CFrame.new(0, WALL_H / 2, len / 2), look)
-		return
+	local prev = BiomeData.List[ctx.biome.Index - 1]
+	local prevGround = if prev then prev.Palette.Ground else Color3.fromRGB(78, 176, 70)
+	Kit.decor(ctx, function()
+		part(ctx, "BorderSeam", Vector3.new(w, 0.2, 3), ctx.cf * CFrame.new(0, FLOOR_TOP + 0.08, -len / 2 + 1.5),
+			prevGround:Lerp(ctx.pal.Ground, 0.5):Lerp(Color3.new(0, 0, 0), 0.2), { Parent = ctx.model })
+		part(ctx, "BorderTrim", Vector3.new(w, 0.2, 1), ctx.cf * CFrame.new(0, FLOOR_TOP + 0.1, -len / 2 + 3.5),
+			ctx.pal.Accent1, { Parent = ctx.model, Material = SMOOTH })
+	end)
+	if ctx.biome.Index >= BiomeData.Count then
+		wallRun(ctx, "WallBack", -w / 2, len / 2, w / 2, len / 2, Vector3.new(0, 0, -1), look)
 	end
-	for _, side in { -1, 1 } do
-		wall(ctx, "WallBack", Vector3.new(seg, WALL_H, 2),
-			ctx.cf * CFrame.new(side * (ENTRANCE_W / 2 + seg / 2), WALL_H / 2, len / 2), look)
-	end
-	local exit = part(ctx, "ExitSign", Vector3.new(ENTRANCE_W + 4, 5, 1.2),
-		ctx.cf * CFrame.new(0, WALL_H + 4, len / 2), Color3.fromHex("#1E2A22"), { Parent = ctx.model })
-	Parts.surfaceText(exit, Enum.NormalId.Back, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
-	Parts.surfaceText(exit, Enum.NormalId.Front, `To {nextBiome.Name}`, nextBiome.Palette.Accent1)
-end
-
--- Props -------------------------------------------------------------------------------------
-
-function Kit.tree(ctx: Ctx, cf: CFrame, scale: number, leaf: Color3, trunk: Color3?)
-	local h = 8 * scale
-	part(ctx, "Trunk", Vector3.new(2.4, h, 2.4) * Vector3.new(scale, 1, scale), cf * CFrame.new(0, h / 2, 0), trunk or Color3.fromRGB(120, 80, 48))
-	part(ctx, "Canopy", Vector3.new(9, 7, 9) * scale, cf * CFrame.new(0, h + 3 * scale, 0) * CFrame.Angles(0, math.rad(45), 0), leaf)
-	part(ctx, "CanopyTop", Vector3.new(6, 4, 6) * scale, cf * CFrame.new(0, h + 8 * scale, 0), leaf:Lerp(Color3.new(1, 1, 1), 0.15))
-end
-
-function Kit.roundTree(ctx: Ctx, cf: CFrame, scale: number, leaf: Color3, trunk: Color3?)
-	local h = 7 * scale
-	part(ctx, "Trunk", Vector3.new(h, 2 * scale, 2 * scale), cf * CFrame.new(0, h / 2, 0) * UPRIGHT, trunk or Color3.fromRGB(110, 72, 44), { Shape = CYL })
-	part(ctx, "Crown", Vector3.one * 9 * scale, cf * CFrame.new(0, h + 3 * scale, 0), leaf, { Shape = BALL })
-end
-
-function Kit.rock(ctx: Ctx, cf: CFrame, scale: number, color: Color3)
-	part(ctx, "Rock", Vector3.new(6, 3.5, 5) * scale, cf * CFrame.new(0, 1.5 * scale, 0) * CFrame.Angles(0, 0.3, 0.1), color)
-	part(ctx, "RockChip", Vector3.new(4, 3, 4) * scale, cf * CFrame.new(scale, 4 * scale, 0) * CFrame.Angles(0, -0.6, 0),
-		color:Lerp(Color3.new(1, 1, 1), 0.12), { Wedge = true })
-end
-
-function Kit.mushroom(ctx: Ctx, cf: CFrame, scale: number, cap: Color3, stem: Color3, glow: boolean?)
-	local h = 6 * scale
-	part(ctx, "Stem", Vector3.new(h, 2.2 * scale, 2.2 * scale), cf * CFrame.new(0, h / 2, 0) * UPRIGHT, stem, { Shape = CYL })
-	part(ctx, "Cap", Vector3.new(2.5 * scale, 9 * scale, 9 * scale), cf * CFrame.new(0, h + scale, 0) * UPRIGHT, cap,
-		{ Shape = CYL, Material = if glow then NEON else nil })
-	part(ctx, "CapTop", Vector3.new(5, 2, 5) * scale, cf * CFrame.new(0, h + 2.6 * scale, 0), cap:Lerp(Color3.new(1, 1, 1), 0.2), { Shape = BALL })
-end
-
-function Kit.cactus(ctx: Ctx, cf: CFrame, scale: number, color: Color3)
-	local h = 9 * scale
-	part(ctx, "Cactus", Vector3.new(2.4 * scale, h, 2.4 * scale), cf * CFrame.new(0, h / 2, 0), color)
-	part(ctx, "ArmL", Vector3.new(1.6, 4, 1.6) * scale, cf * CFrame.new(-2 * scale, h * 0.6, 0), color)
-	part(ctx, "ArmR", Vector3.new(1.6, 3, 1.6) * scale, cf * CFrame.new(2 * scale, h * 0.45, 0), color)
-end
-
-function Kit.crystal(ctx: Ctx, cf: CFrame, scale: number, color: Color3, neon: boolean?)
-	local h = 8 * scale
-	part(ctx, "Crystal", Vector3.new(2.5 * scale, h, 2.5 * scale), cf * CFrame.new(0, h / 2, 0) * CFrame.Angles(0.15, 0, 0.12), color,
-		{ Material = if neon then NEON else nil })
-	part(ctx, "CrystalTip", Vector3.new(2.5 * scale, 2.5 * scale, 2.5 * scale), cf * CFrame.new(0, h + scale * 0.8, 0) * CFrame.Angles(0, math.rad(45), 0),
-		color:Lerp(Color3.new(1, 1, 1), 0.3), { Wedge = true, Material = if neon then NEON else nil })
-end
-
-function Kit.palm(ctx: Ctx, cf: CFrame, scale: number, leaf: Color3, trunk: Color3)
-	local h = 12 * scale
-	part(ctx, "PalmTrunk", Vector3.new(1.8 * scale, h, 1.8 * scale), cf * CFrame.new(0, h / 2, 0) * CFrame.Angles(0, 0, 0.08), trunk)
-	for i = 0, 3 do
-		part(ctx, "Frond", Vector3.new(10 * scale, 0.6, 3 * scale),
-			cf * CFrame.new(0, h, 0) * CFrame.Angles(0, i * math.pi / 2, 0) * CFrame.new(4 * scale, -0.6, 0) * CFrame.Angles(0, 0, -0.25), leaf)
-	end
-end
-
-function Kit.flowers(ctx: Ctx, cf: CFrame, scale: number, petal: Color3, center: Color3)
-	for i = 0, 2 do
-		local o = cf * CFrame.Angles(0, i * 2.1, 0) * CFrame.new(2.2 * scale, 0, 0)
-		part(ctx, "FlowerStem", Vector3.new(0.4, 2, 0.4) * scale, o * CFrame.new(0, scale, 0), Color3.fromRGB(62, 142, 65), { CanCollide = false })
-		part(ctx, "Bloom", Vector3.one * 1.4 * scale, o * CFrame.new(0, 2.2 * scale, 0), if i == 1 then center else petal, { Shape = BALL, CanCollide = false })
-	end
-end
-
-function Kit.pool(ctx: Ctx, cf: CFrame, radius: number, color: Color3, neon: boolean?)
-	part(ctx, "Pool", Vector3.new(0.3, radius * 2, radius * 2), cf * CFrame.new(0, 0.2, 0) * UPRIGHT, color,
-		{ Shape = CYL, Material = if neon then NEON else nil, CanCollide = false, Transparency = if neon then 0 else 0.2 })
-end
-
-function Kit.spire(ctx: Ctx, cf: CFrame, w: number, h: number, color: Color3, cap: Color3?)
-	part(ctx, "Spire", Vector3.new(w, h, w), cf * CFrame.new(0, h / 2, 0), color)
-	if cap then
-		part(ctx, "SpireCap", Vector3.new(w + 1, w * 0.6, w + 1), cf * CFrame.new(0, h + w * 0.3, 0), cap, { Wedge = true })
-	end
-end
-
-function Kit.island(ctx: Ctx, cf: CFrame, w: number, top: Color3, under: Color3)
-	part(ctx, "IslandTop", Vector3.new(w, 2, w), cf, top, { Material = Enum.Material.Grass })
-	part(ctx, "IslandRoot", Vector3.new(w * 0.7, w * 0.5, w * 0.7), cf * CFrame.new(0, -w * 0.25 - 1, 0) * CFrame.Angles(math.pi, 0, 0), under, { Wedge = true })
-end
-
-function Kit.fern(ctx: Ctx, cf: CFrame, scale: number, color: Color3)
-	for i = 0, 3 do
-		part(ctx, "Frond", Vector3.new(1.4 * scale, 5 * scale, 0.3),
-			cf * CFrame.Angles(0, i * math.pi / 2, 0) * CFrame.new(0, 2 * scale, 1.2 * scale) * CFrame.Angles(-0.5, 0, 0), color, { CanCollide = false })
-	end
-end
-
-function Kit.coral(ctx: Ctx, cf: CFrame, scale: number, color: Color3)
-	for i = 0, 2 do
-		local h = (4 + i * 1.5) * scale
-		part(ctx, "CoralBranch", Vector3.new(1.4 * scale, h, 1.4 * scale),
-			cf * CFrame.Angles(0, i * 2.1, 0) * CFrame.new(1.2 * scale, h / 2, 0) * CFrame.Angles(0, 0, 0.25 * (i - 1)), color)
-	end
-	part(ctx, "CoralTip", Vector3.one * 2 * scale, cf * CFrame.new(0, 6 * scale, 0), color:Lerp(Color3.new(1, 1, 1), 0.3), { Shape = BALL })
-end
-
-function Kit.hill(ctx: Ctx, cf: CFrame, w: number, h: number, color: Color3)
-	part(ctx, "Hill", Vector3.new(w, h * 2, w), cf * CFrame.new(0, 0, 0), color, { Shape = BALL, Material = Enum.Material.Grass })
-end
-
-function Kit.glowOrb(ctx: Ctx, cf: CFrame, color: Color3, height: number)
-	local orb = part(ctx, "GlowOrb", Vector3.one * 1.6, cf * CFrame.new(0, height, 0), color, { Shape = BALL, Material = NEON, CanCollide = false })
-	local light = Instance.new("PointLight")
-	light.Color = color
-	light.Range = 16
-	light.Brightness = 1.2
-	light.Parent = orb
 end
 
 -- Skeleton -----------------------------------------------------------------------------------
+
+-- Open floor test shared with the boot layout check: inside the core, off the entrance border.
+function Kit.spotIsOpen(biomeCf: CFrame, worldPos: Vector3): boolean
+	local lp = biomeCf:PointToObjectSpace(worldPos)
+	return math.abs(lp.X) <= CORE_HALF - 6 and lp.Z >= -B.Size / 2 + ENTRY_CLEAR - 0.01 and lp.Z <= B.Size / 2 - 16
+end
 
 local function digSpotModel(ctx: Ctx, id: string, cf: CFrame, tier: number, parent: Instance): Model
 	local m = Parts.model("DigSpot", parent)
@@ -306,7 +392,7 @@ local function digSpotModel(ctx: Ctx, id: string, cf: CFrame, tier: number, pare
 		part(ctx, "Top", Vector3.new(2.6, 1.4, 2.6), cf * CFrame.new(0, 1.4, 0), base:Lerp(Color3.new(0, 0, 0), 0.15), opts)
 	end
 	local marker = part(ctx, "Marker", Vector3.one * 1.2, cf * CFrame.new(0, 4.5, 0),
-		if style == "Glow" then ctx.pal.Accent2 else ctx.pal.Accent1, { Parent = m, Shape = BALL, Material = NEON, CanCollide = false })
+		if style == "Glow" then ctx.pal.Accent2 else ctx.pal.Accent1, { Parent = m, Shape = Enum.PartType.Ball, Material = NEON, CanCollide = false })
 	if tough then
 		local gui = Instance.new("BillboardGui")
 		gui.Size = UDim2.fromOffset(110, 26)
@@ -327,32 +413,33 @@ local function digSpotModel(ctx: Ctx, id: string, cf: CFrame, tier: number, pare
 	return m
 end
 
+-- Builders run first, so every prop footprint is already reserved when spots are placed.
 function Kit.skeleton(ctx: Ctx): Skeleton
-	local s = ctx.size
+	local len = ctx.length
 	local patrol: { Vector3 } = {}
-	local r = s * 0.28
 	for i = 0, 4 do
 		local a = i * math.pi * 2 / 5 + ctx.rng:NextNumber(-0.2, 0.2)
-		table.insert(patrol, Kit.at(ctx, math.cos(a) * r, math.sin(a) * r + s * 0.08).Position)
+		table.insert(patrol, Kit.at(ctx, math.cos(a) * CORE_HALF * 0.6, math.sin(a) * len * 0.28 + len * 0.06).Position)
 	end
 
 	local spotFolder = Instance.new("Folder")
 	spotFolder.Name = "DigSpots"
 	spotFolder.Parent = ctx.model
 	local spots: { DigSpot } = {}
+	local minZ, maxZ = -len / 2 + ENTRY_CLEAR, len / 2 - 16
+	local limX = CORE_HALF - 6
 	for i = 1, B.DigSpots do
 		local tough = i > B.DigSpots - B.ToughSpots
-		-- Tough spots sit deeper in the biome, near the guardian's beat.
-		local cf = Kit.at(ctx, 0, 0)
-		for _ = 1, 30 do
-			local x, z = Kit.randomPoint(ctx, 16)
-			if tough then
-				z = math.abs(z) * 0.6 + s * 0.15
-			end
-			cf = Kit.at(ctx, x, z)
-			local ok = Kit.isClear(ctx, x, z, 16)
+		local x, z = 0, 0
+		for attempt = 1, 60 do
+			x = ctx.rng:NextNumber(-limX, limX)
+			-- Tough spots sit deeper in the biome, near the guardian's beat.
+			z = if tough then ctx.rng:NextNumber(len * 0.1, maxZ) else ctx.rng:NextNumber(minZ, maxZ)
+			local ok = Kit.isFree(ctx, x, z, 4 + SPOT_PROP_CLEAR)
+			local gap = if attempt > 40 then SPOT_GAP / 2 else SPOT_GAP
 			for _, other in spots do
-				if ok and (other.cf.Position - cf.Position).Magnitude < SPOT_GAP then
+				local lp = ctx.cf:PointToObjectSpace(other.cf.Position)
+				if ok and (Vector2.new(lp.X, lp.Z) - Vector2.new(x, z)).Magnitude < gap then
 					ok = false
 				end
 			end
@@ -360,6 +447,8 @@ function Kit.skeleton(ctx: Ctx): Skeleton
 				break
 			end
 		end
+		Kit.reserve(ctx, x, z, 4)
+		local cf = Kit.at(ctx, x, z)
 		local tier = if tough then ctx.biome.ToughTier else 1
 		local id = `{ctx.biome.Id}_{i}`
 		table.insert(spots, { id = id, cf = cf, requiredTier = tier, model = digSpotModel(ctx, id, cf, tier, spotFolder) })
@@ -371,8 +460,8 @@ function Kit.skeleton(ctx: Ctx): Skeleton
 		local center = spot.cf.Position
 		table.insert(danger, { center = center, radius = Config.Guardian.DangerZoneRadius })
 		local zone = part(ctx, "DangerZone", Vector3.new(0.2, Config.Guardian.DangerZoneRadius * 2, Config.Guardian.DangerZoneRadius * 2),
-			CFrame.new(center + Vector3.new(0, 0.12, 0)) * UPRIGHT, Color3.fromHex("#FF4D6D"),
-			{ Parent = ctx.model, Shape = CYL, CanCollide = false, Transparency = 0.82 })
+			CFrame.new(center + Vector3.new(0, 0.27, 0)) * UPRIGHT, Color3.fromHex("#FF4D6D"),
+			{ Parent = ctx.model, Shape = CYL, CanCollide = false, Transparency = 0.82, Shadow = false })
 		zone.CanQuery = false
 	end
 
