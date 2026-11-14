@@ -48,17 +48,20 @@ local Config = {
 		PortalClear = 20, -- gap where a portal faces the next plot or the back row
 		BaseFrontZ = 48, -- front wall line, between the Safe Zone line and the biome 1 gate
 		BaseBackGap = 16, -- grass strip behind every plot; the pond upgrade reaches ~15 studs past the plot edge
-		BaseOpening = 52,
+		BaseOpening = 160, -- same as Biome.Doorway
 		BaseWallHeight = 28,
 	},
 
 	-- Biomes sit in one line in front of the plot row. Walk +Z to the next one.
 	Biome = {
 		RingRadius = 0,
-		Size = 220, -- length along the progression, Z
-		Width = 156, -- across the zone, X. Longer than it is wide.
-		Gap = 18,
-		FrontGap = 28, -- studs from the plot row's front edge to biome 1
+		Size = 300, -- length along the progression, Z
+		Width = 356, -- across the zone, X. Matches the base so the side walls run in one line.
+		Gap = 0, -- biomes share a border; floors touch
+		FrontGap = 20, -- studs from the plot row's front edge to biome 1: the outer face of the base front wall
+		Doorway = 160, -- open span in every shared border, base exit included
+		WallHeight = 40,
+		CoreFraction = 0.6, -- middle share of the width kept open for digging; big props stay outside it
 		DigSpots = 10,
 		ToughSpots = 3,
 		EnforceSeconds = 0.5,
@@ -96,7 +99,7 @@ local Config = {
 
 	-- One carried seed per player. Only your own plot banks it.
 	Carry = {
-		SpeedFactor = 0.9, -- WalkSpeed multiplier while carrying
+		SpeedFactor = 1, -- WalkSpeed multiplier while carrying
 		RevealSeconds = 20, -- a dug seed waits this long on its dirt spot
 		DropSeconds = 20, -- a dropped seed's countdown
 		PickupRange = 10,
@@ -122,8 +125,16 @@ local Config = {
 		PatrolFactor = 0.5, -- patrol speed = baseline speed x this
 		OutrunFactor = 0.85, -- carrier speed stat > recommended: chase = carrier walk speed x this
 		CatchFactor = 1.2, -- carrier speed stat <= recommended: chase = carrier walk speed x this
+		Accel = 140, -- studs/s^2 toward the wanted speed
+		TurnRate = 14, -- facing catch-up per second
+		StartGraceSeconds = 0.75, -- no catch right after a chase starts
+		SightSeconds = 0.1, -- line-of-sight raycast interval per chasing guardian
+		SightHeight = 3,
+		RepathDistance = 10, -- goal moved this far from the last path goal -> new path
+		RepathScale = 0.4, -- min seconds between paths = def.RecomputeSeconds x this
+		WaypointReach = 3,
+		BlockedSeconds = 0.6, -- no headway on a path for this long -> drop it and repath
 		MaxChaseSeconds = 60,
-		StuckSeconds = 3, -- no progress toward the target for this long -> give up, return
 		StuckMinProgress = 1.5,
 		CooldownSeconds = 3, -- no catches for this long after a catch
 		KnockbackHorizontal = 50,

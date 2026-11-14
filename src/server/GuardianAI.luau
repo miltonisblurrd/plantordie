@@ -1,12 +1,17 @@
 --!strict
--- One guardian per biome, driven by a single throttled server loop (spec §6).
---   Patrol  -> walk the biome's patrol points at PatrolFactor x chase speed. Ignores everyone.
+-- One guardian per biome (spec §6). Chasing guardians step every Heartbeat; patrol and return
+-- run on a throttled TickSeconds loop. All decisions are server-side; the rig is server-owned
+-- physics driven through AlignPosition, so clients see smooth interpolated motion.
+--   Patrol  -> walk the biome's patrol points at PatrolFactor x baseline speed. Ignores everyone.
 --   Chase   -> started only by picking up a seed from this guardian's biome; targets that carrier
---              alone. PathfindingService path to the target (led by Predict seconds of velocity),
---              recomputed every RecomputeSeconds off-thread; direct move while no path. May leave
---              the biome. Ends the moment the carrier enters the shared Safe Zone, or when they
---              bank, drop, leave, or after MaxChaseSeconds. A carrier who escaped to safety and
---              comes back into this guardian's biome still holding its seed is chased again.
+--              alone. Runs straight at the target (led by Predict seconds of velocity) while it
+--              has line of sight; when blocked, follows one PathfindingService path, recomputed
+--              only when the target moves RepathDistance from the path's goal or the path stalls.
+--              One path computes at a time server-wide. Speed ramps at Accel and facing turns
+--              smoothly. No catch for StartGraceSeconds, and never without line of sight. May
+--              leave the biome. Ends the moment the carrier enters the shared Safe Zone, or when
+--              they bank, drop, leave, or after MaxChaseSeconds. A carrier who escaped to safety
+--              and comes back into this guardian's biome still holding its seed is chased again.
 --   Return  -> walk back into the biome, then patrol.
 -- No guardian ever moves into the Safe Zone: every step is clamped at its boundary.
 --   Catch   -> knockback + stun, the seed drops where the carrier stood, no catches for
@@ -21,6 +26,7 @@
 local PathfindingService = game:GetService("PathfindingService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
@@ -52,8 +58,14 @@ type Guardian = {
 	state: State,
 	patrolIdx: number,
 	recommended: number,
+	speed: number,
 	chaseSpeed: number,
 	patrolSpeed: number,
+	alignPos: AlignPosition,
+	alignOri: AlignOrientation,
+	los: boolean,
+	losAt: number,
+	lastGoal: Vector3,
 	target: Player?,
 	chaseStartedAt: number,
 	noCatchUntil: number,
@@ -75,6 +87,10 @@ local eventGuardianId: string? = nil
 local rootFolder: Instance? = nil
 -- Carriers whose chase ended at the Safe Zone, keyed to the guardian zone they escaped from.
 local escaped: { [Player]: string } = {}
+local pathBusy = false
+local sightParams = RaycastParams.new()
+sightParams.FilterType = Enum.RaycastFilterType.Exclude
+sightParams.IgnoreWater = true
 
 local function flat(v: Vector3): Vector3
 	return Vector3.new(v.X, 0, v.Z)
@@ -85,7 +101,8 @@ local function groundY(): number
 end
 
 local function place(g: Guardian)
-	g.model:PivotTo(CFrame.lookAt(g.pos, g.pos + g.facing))
+	g.alignPos.Position = g.pos
+	g.alignOri.CFrame = CFrame.lookAt(Vector3.zero, g.facing)
 end
 
 local function allGuardians(): { Guardian }
@@ -106,8 +123,9 @@ local function clampToBiome(info: Biomes.BiomeInfo, pos: Vector3): Vector3
 	return Vector3.new(world.X, groundY(), world.Z)
 end
 
--- Moves toward `goal` at `speed`, never into the Safe Zone; returns true once within 1.5 studs
--- or when the boundary blocks any further progress.
+-- Moves toward `goal`, ramping the current speed toward `speed` at Accel and turning the facing
+-- toward the move at TurnRate; never into the Safe Zone. Returns true once within 1.5 studs or
+-- when the boundary blocks any further progress.
 local function step(g: Guardian, goal: Vector3, speed: number, dt: number, free: boolean): boolean
 	goal = SafeZone.pushOut(goal)
 	local delta = flat(goal - g.pos)
@@ -115,21 +133,41 @@ local function step(g: Guardian, goal: Vector3, speed: number, dt: number, free:
 	if dist < 1.5 then
 		return true
 	end
+	local diff = speed - g.speed
+	g.speed += math.clamp(diff, -G.Accel * dt, G.Accel * dt)
 	local dir = delta / dist
-	local nextPos = g.pos + dir * math.min(dist, speed * dt)
+	local nextPos = g.pos + dir * math.min(dist, g.speed * dt)
 	nextPos = if free then Vector3.new(nextPos.X, groundY(), nextPos.Z) else g.clamp(nextPos)
 	nextPos = SafeZone.keepOut(g.pos, nextPos)
 	local moved = flat(nextPos - g.pos).Magnitude
 	g.pos = Vector3.new(nextPos.X, groundY(), nextPos.Z)
-	g.facing = dir
+	local turned = g.facing:Lerp(dir, math.min(1, G.TurnRate * dt))
+	g.facing = if turned.Magnitude > 0.01 then turned.Unit else dir
 	place(g)
 	return moved < 0.01
+end
+
+local function hasLineOfSight(g: Guardian, tpos: Vector3): boolean
+	local ignore: { Instance } = { g.model }
+	if rootFolder then
+		table.insert(ignore, rootFolder)
+	end
+	for _, player in Players:GetPlayers() do
+		if player.Character then
+			table.insert(ignore, player.Character)
+		end
+	end
+	sightParams.FilterDescendantsInstances = ignore
+	local from = g.pos + Vector3.new(0, G.SightHeight, 0)
+	local to = Vector3.new(tpos.X, from.Y, tpos.Z)
+	return workspace:Raycast(from, to - from, sightParams) == nil
 end
 
 local function endChase(g: Guardian, reason: string, knockback: Vector3?)
 	local target = g.target
 	g.target = nil
 	g.waypoints = {}
+	g.model:SetAttribute("Chasing", false)
 	if g.state == "Chase" then
 		g.state = "Return"
 	end
@@ -155,9 +193,13 @@ local function startChase(g: Guardian, player: Player, now: number): boolean
 	g.waypoints = {}
 	g.wpIdx = 1
 	g.lastCompute = -math.huge
+	g.lastGoal = Vector3.new(math.huge, 0, math.huge)
+	g.losAt = -math.huge
+	g.noCatchUntil = math.max(g.noCatchUntil, now + G.StartGraceSeconds)
 	g.stuckFrom = g.pos
 	g.stuckAt = now
 	g.sleeping = false
+	g.model:SetAttribute("Chasing", true)
 	g.alert:Play()
 	Net.fire("Chase", player, "start", g.def.Name)
 	return true
@@ -184,11 +226,13 @@ end
 
 local function computePath(g: Guardian, goal: Vector3, target: Player)
 	g.computing = true
+	pathBusy = true
 	local from = g.pos
 	local ok = pcall(function()
 		g.path:ComputeAsync(from, goal)
 	end)
 	g.computing = false
+	pathBusy = false
 	if g.target ~= target or g.state ~= "Chase" then
 		return
 	end
@@ -227,7 +271,12 @@ local function chase(g: Guardian, dt: number, now: number)
 		endChase(g, "safe")
 		return
 	end
-	if now >= g.noCatchUntil and flat(tpos - g.pos).Magnitude <= g.def.CatchRange then
+	if now - g.losAt >= G.SightSeconds then
+		g.losAt = now
+		g.los = hasLineOfSight(g, tpos)
+	end
+	local dist = flat(tpos - g.pos).Magnitude
+	if now >= g.noCatchUntil and dist <= g.def.CatchRange and (g.los or dist <= g.def.CatchRange * 0.6) then
 		catch(g, target, root, now)
 		return
 	end
@@ -241,25 +290,34 @@ local function chase(g: Guardian, dt: number, now: number)
 
 	local lead = tpos + flat(root.AssemblyLinearVelocity) * g.def.Predict
 	local goal = Vector3.new(lead.X, groundY(), lead.Z)
-	if not g.computing and now - g.lastCompute >= g.def.RecomputeSeconds then
-		g.lastCompute = now
-		task.spawn(computePath, g, goal, target)
-	end
-	local wp = g.waypoints[g.wpIdx]
-	if wp then
-		if step(g, wp, g.chaseSpeed, dt, true) then
-			g.wpIdx += 1
-		end
+	local moveTo = goal
+	if g.los then
+		g.waypoints = {}
 	else
-		step(g, goal, g.chaseSpeed, dt, true)
+		local wp = g.waypoints[g.wpIdx]
+		while wp and flat(wp - g.pos).Magnitude <= G.WaypointReach do
+			g.wpIdx += 1
+			wp = g.waypoints[g.wpIdx]
+		end
+		local stale = wp == nil or flat(goal - g.lastGoal).Magnitude > G.RepathDistance
+		if stale and not g.computing and not pathBusy and now - g.lastCompute >= g.def.RecomputeSeconds * G.RepathScale then
+			g.lastCompute = now
+			g.lastGoal = goal
+			task.spawn(computePath, g, goal, target)
+		end
+		if wp then
+			moveTo = wp
+		end
 	end
+	step(g, moveTo, g.chaseSpeed, dt, true)
 
-	-- A path that makes no headway is dropped for a direct move; the chase itself goes on.
+	-- A path that makes no headway is dropped and recomputed; the chase itself goes on.
 	if (g.pos - g.stuckFrom).Magnitude >= G.StuckMinProgress then
 		g.stuckFrom = g.pos
 		g.stuckAt = now
-	elseif now - g.stuckAt > G.StuckSeconds then
+	elseif now - g.stuckAt > G.BlockedSeconds then
 		g.waypoints = {}
+		g.lastCompute = -math.huge
 		g.stuckFrom = g.pos
 		g.stuckAt = now
 	end
@@ -313,7 +371,6 @@ local function tick(dt: number)
 	for _, g in allGuardians() do
 		if g.state == "Chase" then
 			g.sleeping = false
-			chase(g, dt, now)
 		elseif g.state == "Return" then
 			g.sleeping = false
 			returnHome(g, dt)
@@ -362,16 +419,23 @@ local function spawn(def: GuardianDefs.Guardian, folder: Instance, fields: {
 	alert.Parent = model.PrimaryPart
 	local recommended = recommendedFor(def)
 	local baseSpeed = Speed.guardianSpeedFor(recommended)
+	local root = model.PrimaryPart :: BasePart
 	local g: Guardian = {
 		def = def, zone = fields.zone, patrolPts = fields.patrolPts,
 		inRegion = fields.inRegion, clamp = fields.clamp, model = model,
 		path = PathfindingService:CreatePath({ AgentRadius = 2 * def.Scale, AgentHeight = 6 * def.Scale, AgentCanJump = false }),
 		pos = pos, facing = Vector3.new(0, 0, -1), state = "Patrol", patrolIdx = 2,
-		recommended = recommended, chaseSpeed = baseSpeed, patrolSpeed = baseSpeed * G.PatrolFactor,
+		recommended = recommended, speed = 0, chaseSpeed = baseSpeed, patrolSpeed = baseSpeed * G.PatrolFactor,
+		alignPos = root:FindFirstChildOfClass("AlignPosition") :: AlignPosition,
+		alignOri = root:FindFirstChildOfClass("AlignOrientation") :: AlignOrientation,
+		los = false, losAt = 0, lastGoal = pos,
 		target = nil, chaseStartedAt = 0, noCatchUntil = 0, waypoints = {}, wpIdx = 1, lastCompute = 0,
 		computing = false, stuckFrom = pos, stuckAt = 0, sleeping = true, alert = alert,
 	}
 	place(g)
+	if root:IsDescendantOf(workspace) then
+		pcall(root.SetNetworkOwner, root, nil)
+	end
 	return g
 end
 
@@ -493,6 +557,14 @@ function GuardianAI.start(worldFolder: Instance)
 		escaped[player] = nil
 	end)
 
+	RunService.Heartbeat:Connect(function(dt)
+		local now = os.clock()
+		for _, g in allGuardians() do
+			if g.state == "Chase" then
+				chase(g, math.min(dt, 0.1), now)
+			end
+		end
+	end)
 	task.spawn(function()
 		local last = os.clock()
 		while true do

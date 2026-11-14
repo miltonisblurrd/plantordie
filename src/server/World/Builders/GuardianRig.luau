@@ -1,8 +1,12 @@
 --!strict
 -- Part-built blocky guardian rigs. Every guardian shares a body plan (legs, torso, head, glowing
--- eyes) and its Shape adds a silhouette of its own. All parts are anchored and non-colliding;
--- the AI moves the whole model with PivotTo. The pivot sits at the feet.
+-- eyes) and its Shape adds a silhouette of its own. The model is one unanchored, non-colliding
+-- assembly: Root carries an AlignPosition / AlignOrientation the AI drives (so clients see
+-- interpolated physics, not stepped teleports). Legs and arms hang on Motor6Ds named "Swing"
+-- (hip / shoulder at the top) that the client animates; everything else is welded to Root.
+-- The pivot sits at the feet. Tagged "Guardian".
 
+local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Guardians = require(ReplicatedStorage.Shared.Guardians)
@@ -111,6 +115,55 @@ function GuardianRig.build(def: Guardians.Guardian, cf: CFrame, parent: Instance
 	label.Text = def.Name
 	label.Parent = gui
 
+	local swing = 0
+	for _, p in m:GetChildren() do
+		if not p:IsA("BasePart") or p == root then
+			continue
+		end
+		if p.Name == "Leg" or p.Name == "Arm" then
+			local half = p.Size.Y / 2
+			local motor = Instance.new("Motor6D")
+			motor.Name = "Swing"
+			motor.Part0 = root
+			motor.Part1 = p
+			motor.C0 = root.CFrame:ToObjectSpace(p.CFrame) * CFrame.new(0, half, 0)
+			motor.C1 = CFrame.new(0, half, 0)
+			motor:SetAttribute("Phase", if swing % 2 == 0 then 0 else math.pi)
+			motor:SetAttribute("Arm", p.Name == "Arm")
+			motor.Parent = p
+			swing += 1
+		else
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = root
+			weld.Part1 = p
+			weld.Parent = p
+		end
+		p.Massless = true
+		p.Anchored = false
+	end
+
+	local att = Instance.new("Attachment")
+	att.Name = "Drive"
+	att.Parent = root
+	local alignPos = Instance.new("AlignPosition")
+	alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+	alignPos.Attachment0 = att
+	alignPos.MaxForce = math.huge
+	alignPos.MaxVelocity = math.huge
+	alignPos.Responsiveness = 200
+	alignPos.Position = root.Position
+	alignPos.Parent = root
+	local alignOri = Instance.new("AlignOrientation")
+	alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	alignOri.Attachment0 = att
+	alignOri.MaxTorque = math.huge
+	alignOri.MaxAngularVelocity = math.huge
+	alignOri.Responsiveness = 200
+	alignOri.CFrame = root.CFrame.Rotation
+	alignOri.Parent = root
+	root.Anchored = false
+
+	CollectionService:AddTag(m, "Guardian")
 	return m
 end
 
