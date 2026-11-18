@@ -14,6 +14,7 @@ local Boosts = require(ReplicatedStorage.Shared.RobuxBoosts)
 local Data = require(script.Parent.Data)
 local Net = require(script.Parent.Net)
 local Plots = require(script.Parent.Plots)
+local SafeZone = require(script.Parent.SafeZone)
 
 local Treadmill = {}
 
@@ -46,11 +47,14 @@ end
 -- Writes WalkSpeed only when it moved by more than WalkSpeedMinDelta.
 function Treadmill.applyWalkSpeed(player: Player, force: boolean?)
 	local session = Data.get(player)
-	local hum = humanoidOf(player)
+	local hum, root = humanoidOf(player)
 	if not session or not hum then
 		return
 	end
-	local target = if (stunnedUntil[player] or 0) > os.clock() then 0 else Speed.walkSpeedFor(session.data.speed) * speedScale(player)
+	local inSafe = root ~= nil and SafeZone.contains(root.Position)
+	local target = if (stunnedUntil[player] or 0) > os.clock()
+		then 0
+		else Speed.walkSpeedForZone(session.data.speed, inSafe) * speedScale(player)
 	if force or math.abs(hum.WalkSpeed - target) >= Config.Treadmill.WalkSpeedMinDelta then
 		hum.WalkSpeed = target
 	end
@@ -138,6 +142,12 @@ end
 
 function Treadmill.start()
 	Net.on("UpgradeTreadmill", {}, upgrade)
+
+	local function refresh(player: Player)
+		Treadmill.applyWalkSpeed(player, true)
+	end
+	SafeZone.onEnter(refresh)
+	SafeZone.onLeave(refresh)
 
 	-- Ownership notice for both prompts; the owner's money path runs through the client confirm.
 	for i = 1, Config.World.PlotCount do

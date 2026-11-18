@@ -171,12 +171,23 @@ local function nightLighting()
 	local cc = Instance.new("ColorCorrectionEffect")
 	cc.Name = "NightTint"
 	cc.Parent = Lighting
+	-- ClockTime still goes through midnight, which kills the sun. Keep a moonlight fill so
+	-- plants, lanes, and zombies stay readable.
+	local dayAmbient = Lighting.Ambient
+	local dayOutdoor = Lighting.OutdoorAmbient
+	local dayBrightness = Lighting.Brightness
+	local blend = TweenInfo.new(4)
 	State.onDayNight(function(info)
 		local night = info.phase == "Night"
-		TweenService:Create(cc, TweenInfo.new(4), {
-			TintColor = if night then Color3.fromRGB(190, 200, 255) else Color3.new(1, 1, 1),
-			Brightness = if night then -0.04 else 0,
-			Saturation = if night then -0.15 else 0,
+		TweenService:Create(cc, blend, {
+			TintColor = if night then Color3.fromRGB(210, 220, 255) else Color3.new(1, 1, 1),
+			Brightness = if night then 0.12 else 0,
+			Saturation = if night then -0.06 else 0,
+		}):Play()
+		TweenService:Create(Lighting, blend, {
+			Ambient = if night then Color3.fromRGB(110, 118, 145) else dayAmbient,
+			OutdoorAmbient = if night then Color3.fromRGB(165, 178, 210) else dayOutdoor,
+			Brightness = if night then math.max(dayBrightness, 2.4) else dayBrightness,
 		}):Play()
 	end)
 end

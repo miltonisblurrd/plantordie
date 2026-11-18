@@ -14,8 +14,9 @@
 --              and comes back into this guardian's biome still holding its seed is chased again.
 --   Return  -> walk back into the biome, then patrol.
 -- No guardian ever moves into the Safe Zone: every step is clamped at its boundary.
---   Catch   -> knockback + stun, the seed drops where the carrier stood, no catches for
---              CooldownSeconds. A new chase needs a new pickup.
+--   Catch   -> the seed drops where the carrier stood, no catches for CooldownSeconds.
+--              A guardian that is faster than the carrier also flings them. A new chase
+--              needs a new pickup.
 -- Chase speed follows the carrier: a speed stat above the biome's RecommendedSpeed outruns the
 -- guardian (OutrunFactor x their carrying walk speed); at or below it, the guardian is faster
 -- (CatchFactor). Patrol runs at Speed.guardianSpeedFor(RecommendedSpeed). Day/night has no effect.
@@ -205,6 +206,14 @@ local function startChase(g: Guardian, player: Player, now: number): boolean
 	return true
 end
 
+local function guardianFaster(g: Guardian, player: Player): boolean
+	local session = Data.get(player)
+	if not session then
+		return true
+	end
+	return session.data.speed <= g.recommended
+end
+
 local function catch(g: Guardian, player: Player, root: BasePart, now: number)
 	if SafeZone.isProtected(player) then
 		endChase(g, "safe")
@@ -212,11 +221,15 @@ local function catch(g: Guardian, player: Player, root: BasePart, now: number)
 	end
 	local away = flat(root.Position - g.pos)
 	local dir = if away.Magnitude > 0.01 then away.Unit else g.facing
-	local knock = dir * G.KnockbackHorizontal + Vector3.new(0, G.KnockbackUp, 0)
+	local fling = guardianFaster(g, player)
+	local knock = dir * (if fling then G.FlingHorizontal else G.KnockbackHorizontal)
+		+ Vector3.new(0, if fling then G.FlingUp else G.KnockbackUp, 0)
 	g.noCatchUntil = now + G.CooldownSeconds
 	local item = Carry.carried(player)
-	endChase(g, "catch", knock)
-	root.AssemblyLinearVelocity = knock
+	endChase(g, "catch", if fling then knock else nil)
+	if fling then
+		root.AssemblyLinearVelocity = knock
+	end
 	Treadmill.stun(player, G.StunSeconds)
 	Carry.drop(player, root.Position, "catch")
 	if item then

@@ -2,13 +2,15 @@
 -- Chase effects, driven only by the server's Chase event (sent to the carrier alone):
 --   start -> siren, a red full-screen flash, and a pulsing RUN! banner at top-centre that stays
 --            until the chase ends. The biome banner is pushed below it via its YOffset attribute.
---   end   -> banner hidden (bank, catch, drop, safe area, timeout). A catch carries the
---            knockback impulse, applied here because the client owns its character's physics.
+--   end   -> banner hidden (bank, catch, drop, safe area, timeout). A catch by a faster
+--            guardian carries a fling, applied here because the client owns character physics.
 -- Also owns the DROP button, shown only while the snapshot says we carry a seed.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local Config = require(ReplicatedStorage.Shared.Config)
 local Ui = require(script.Parent.Ui)
 local State = require(script.Parent.State)
 local Sfx = require(script.Parent.Sfx)
@@ -156,8 +158,19 @@ function Danger.start()
 			if reason == "catch" and typeof(knockback) == "Vector3" then
 				local character = player.Character
 				local root = character and character:FindFirstChild("HumanoidRootPart")
+				local hum = character and character:FindFirstChildOfClass("Humanoid")
 				if root and root:IsA("BasePart") then
 					root.AssemblyLinearVelocity = knockback
+				end
+				if hum then
+					hum.PlatformStand = true
+					hum:ChangeState(Enum.HumanoidStateType.Physics)
+					task.delay(Config.Guardian.StunSeconds, function()
+						if hum.Parent then
+							hum.PlatformStand = false
+							hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+						end
+					end)
 				end
 			end
 		end

@@ -58,11 +58,6 @@ local function buyHouse(player: Player)
 		Net.notify(player, "Your house is already max tier.", "warn")
 		return
 	end
-	local required = BiomeData.List[nextDef.RequiredBiome]
-	if required and not Biomes.isUnlocked(d, required.Id) then
-		Net.notify(player, `{nextDef.Name} requires {required.Name} to be unlocked.`, "error")
-		return
-	end
 	if d.money < nextDef.Cost then
 		Net.notify(player, `Not enough money. {nextDef.Name} costs {Format.money(nextDef.Cost)}.`, "error")
 		return

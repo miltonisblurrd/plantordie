@@ -56,7 +56,7 @@ local Config = {
 	Biome = {
 		RingRadius = 0,
 		Size = 300, -- length along the progression, Z
-		Width = 356, -- across the zone, X. Matches the base so the side walls run in one line.
+		Width = 280, -- across the zone, X. Narrower than the base so the trail feels tighter.
 		Gap = 0, -- biomes share a border; floors touch
 		FrontGap = 20, -- studs from the plot row's front edge to biome 1: the outer face of the base front wall
 		Doorway = 160, -- open span in every shared border, base exit included
@@ -103,7 +103,8 @@ local Config = {
 		RevealSeconds = 20, -- a dug seed waits this long on its dirt spot
 		DropSeconds = 20, -- a dropped seed's countdown
 		PickupRange = 10,
-		TouchRange = 4, -- walking over a seed picks it up
+		TouchRange = 4, -- walking over a freshly dug seed picks it up
+		PickupHold = 0.45, -- a dropped seed only returns if the prompt is held
 		CheckSeconds = 0.25,
 	},
 
@@ -139,6 +140,9 @@ local Config = {
 		CooldownSeconds = 3, -- no catches for this long after a catch
 		KnockbackHorizontal = 50,
 		KnockbackUp = 35,
+		-- Guardian faster than the carrier (speed stat at or under RecommendedSpeed): launch them.
+		FlingHorizontal = 120,
+		FlingUp = 72,
 		StunSeconds = 1.5,
 		HipHeight = 3,
 		DangerZoneCount = 2,
@@ -174,7 +178,7 @@ local Config = {
 	},
 
 	DayNight = {
-		DaySeconds = 300, -- 5 minutes between nights
+		DaySeconds = 600, -- 10 minutes between nights
 		NightSeconds = 150, -- 2:30 of night; portals only spawn then
 		DayClockStart = 6.5,
 		DayClockEnd = 18.5,
@@ -185,6 +189,10 @@ local Config = {
 		TickSeconds = 1,
 		HeightTolerance = 6, -- studs above the belt top the root part may be
 		WalkSpeedMinDelta = 0.25, -- skip WalkSpeed writes smaller than this
+		-- Outside the Safe Zone only. Hub speed stays on the log curve in Speed.luau.
+		-- Multiplier is 1 + FieldLog * log10(1 + speed), clamped to FieldMax.
+		FieldLog = 0.85,
+		FieldMax = 8,
 	},
 
 	Sync = {

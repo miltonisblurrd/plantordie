@@ -6,7 +6,6 @@ local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local BiomeData = require(ReplicatedStorage.Shared.Biomes)
 local Config = require(ReplicatedStorage.Shared.Config)
 local Format = require(ReplicatedStorage.Shared.Format)
 local Houses = require(ReplicatedStorage.Shared.Houses)
@@ -54,11 +53,6 @@ local function promptHouse()
 	local nextDef = Houses.List[snap.houseTier + 1]
 	if not nextDef then
 		Notifications.show("Your house is already max tier.", "info")
-		return
-	end
-	local req = BiomeData.List[nextDef.RequiredBiome]
-	if req and req.Cost > 0 and not snap.biomesUnlocked[req.Id] then
-		Notifications.show(`{nextDef.Name} requires {req.Name} to be unlocked.`, "error")
 		return
 	end
 	if snap.money < nextDef.Cost then
@@ -193,9 +187,7 @@ function Shops.start(bar: GuiObject)
 	State.onSnapshot(function(s)
 		local nextDef = Houses.List[s.houseTier + 1]
 		if nextDef then
-			local req = BiomeData.List[nextDef.RequiredBiome]
 			houseInfo.Text = `{s.houseName} → {nextDef.Name}: {Format.money(nextDef.Cost)}`
-				.. (if req and req.Cost > 0 then ` (needs {req.Name})` else "")
 			houseBtn.Visible = true
 		else
 			houseInfo.Text = `{s.houseName} (max tier)`

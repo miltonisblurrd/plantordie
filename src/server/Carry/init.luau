@@ -1,9 +1,11 @@
 --!strict
 -- Carried seeds. A successful dig reveals a seed on its dirt spot; picking it up (prompt or
 -- walking over it) makes you its carrier: one seed at a time, shown above your head, slower
--- WalkSpeed, and the seed's guardian gives chase. Only your own plot banks it into `seeds`.
+-- WalkSpeed, and the seed's guardian gives chase. Crossing back into the Safe Zone
+-- banks it into `seeds`.
 -- Any drop (DROP button, guardian catch, death, disconnect) leaves it on the ground with a
--- countdown; at 0 it is gone for good. Carried seeds are never saved. State lives in Core;
+-- countdown; at 0 it is gone for good. It does not return until the pickup prompt is held.
+-- Carried seeds are never saved. State lives in Core;
 -- positions only ever come from the server's view of the character.
 
 local Players = game:GetService("Players")
@@ -17,7 +19,7 @@ local Biomes = require(script.Parent.Biomes)
 local Data = require(script.Parent.Data)
 local Index = require(script.Parent.Index)
 local Net = require(script.Parent.Net)
-local Plots = require(script.Parent.Plots)
+local SafeZone = require(ReplicatedStorage.Shared.SafeZone)
 local Sync = require(script.Parent.Sync)
 local Treadmill = require(script.Parent.Treadmill)
 
@@ -175,7 +177,8 @@ local function buildModel(item: Item)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Pick up"
 	prompt.ObjectText = nameOf(item.species)
-	prompt.HoldDuration = 0
+	-- A drop sits until the player holds the prompt. Walking onto it must not take it back.
+	prompt.HoldDuration = if item.state == "dropped" then C.PickupHold else 0
 	prompt.MaxActivationDistance = C.PickupRange
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = seed
@@ -327,13 +330,12 @@ local function tick()
 			local pos = root.Position
 			lastPos[player] = pos
 			if Core.carried(state, player) then
-				local idx = Plots.plotAt(pos)
-				if idx and idx == Plots.plotOf(player) then
+				if SafeZone.contains(pos) then
 					bank(player)
 				end
 			else
 				for id, item in state.items do
-					if item.pos and state.canTake(item, player, now) and (item.pos - pos).Magnitude <= C.TouchRange then
+					if item.state ~= "dropped" and item.pos and state.canTake(item, player, now) and (item.pos - pos).Magnitude <= C.TouchRange then
 						tryPickup(player, id)
 						break
 					end
