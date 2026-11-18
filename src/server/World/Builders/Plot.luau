@@ -136,8 +136,11 @@ local function signLabel(parent: Instance, name: string, text: string, pos: UDim
 end
 
 local function signButton(parent: Instance, name: string, color: Color3, pos: UDim2, size: UDim2): TextLabel
-	local f = Instance.new("Frame")
+	local f = Instance.new("TextButton")
 	f.Name = name
+	f.AutoButtonColor = false
+	f.Text = ""
+	f.Active = true
 	f.BackgroundColor3 = color
 	f.BorderSizePixel = 0
 	f.Position = pos
@@ -150,7 +153,9 @@ local function signButton(parent: Instance, name: string, color: Color3, pos: UD
 	stroke.Thickness = 4
 	stroke.Color = Color3.fromRGB(20, 20, 40)
 	stroke.Parent = f
-	return signLabel(f, "Text", "", UDim2.fromScale(0.08, 0.12), UDim2.fromScale(0.84, 0.76), Enum.Font.FredokaOne)
+	local label = signLabel(f, "Text", "", UDim2.fromScale(0.08, 0.12), UDim2.fromScale(0.84, 0.76), Enum.Font.FredokaOne)
+	label.Active = false
+	return label
 end
 
 local function treadmillPrompt(board: BasePart, name: string, action: string, key: Enum.KeyCode)
@@ -163,6 +168,7 @@ local function treadmillPrompt(board: BasePart, name: string, action: string, ke
 	prompt.ClickablePrompt = true
 	prompt.RequiresLineOfSight = false
 	prompt.KeyboardKeyCode = key
+	prompt.Enabled = false
 	prompt.Parent = board
 end
 
@@ -513,16 +519,14 @@ function PlotBuilder.setTreadmill(refs: PlotRefs, level: number)
 	refs.treadmillMoneyLabel.Text = if cost then `${Format.short(cost)}` else "MAX"
 	refs.treadmillRobuxLabel.Text = if cost then `R$ {Products.ByKey.TreadmillLevel.PriceRobux}` else ""
 	local robuxButton = refs.treadmillRobuxLabel.Parent
-	if robuxButton and robuxButton:IsA("Frame") then
+	if robuxButton and robuxButton:IsA("GuiObject") then
 		robuxButton.Visible = cost ~= nil
 	end
 	for _, name in { "TreadmillMoneyPrompt", "TreadmillRobuxPrompt" } do
 		local prompt = refs.treadmillSign:FindFirstChild(name)
 		if prompt and prompt:IsA("ProximityPrompt") then
+			prompt.Enabled = false
 			prompt.ObjectText = if cost then `Lv. {level + 1}` else "MAX"
-			if name == "TreadmillRobuxPrompt" then
-				prompt.Enabled = cost ~= nil
-			end
 		end
 	end
 end

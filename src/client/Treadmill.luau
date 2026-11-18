@@ -1,8 +1,8 @@
 --!strict
--- Treadmill presentation: "+96K 👟" popups above your belt on SpeedGain, and the upgrade sign's
--- prompts (money confirm -> UpgradeTreadmill; Robux -> a saved credit, else Purchases). At max
--- the server hides the R$ button and disables its prompt; this refuses too in case the sign lags.
--- The server re-checks ownership, level and price; non-owners get the server's notice.
+-- Treadmill presentation: "+96K 👟" popups above your belt on SpeedGain, a run animation while
+-- you stand on it, and the upgrade sign's own buttons (money turns green when you can afford
+-- it, then a confirm -> UpgradeTreadmill; Robux -> a saved credit, else Purchases). At max
+-- the server hides the R$ button. The server re-checks ownership, level and price.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -123,41 +123,131 @@ local function promptMoney()
 end
 
 local RUN_ID = "rbxassetid://507767714"
+local WALK_ID = "rbxassetid://507777826"
+local MONEY_IDLE = Color3.fromRGB(205, 205, 210)
+local MONEY_READY = Color3.fromRGB(72, 210, 96)
 local runTrack: AnimationTrack? = nil
 local running = false
+local savedWalkId: string? = nil
+
+local function walkAnimOf(character: Model): Animation?
+	local animate = character:FindFirstChild("Animate")
+	local walk = animate and animate:FindFirstChild("walk")
+	local anim = walk and walk:FindFirstChildWhichIsA("Animation")
+	return if anim and anim:IsA("Animation") then anim else nil
+end
 
 local function setRunning(on: boolean)
-	if on == running then
+	local character = Players.LocalPlayer.Character
+	local hum = character and character:FindFirstChildOfClass("Humanoid")
+	local animator = hum and (hum:FindFirstChildOfClass("Animator") or Instance.new("Animator"))
+	if animator and hum and animator.Parent ~= hum then
+		animator.Parent = hum
+	end
+	local walkAnim = character and walkAnimOf(character)
+	if on and running and runTrack and animator then
+		if walkAnim and walkAnim.AnimationId ~= RUN_ID then
+			savedWalkId = walkAnim.AnimationId
+			walkAnim.AnimationId = RUN_ID
+		end
+		for _, track in animator:GetPlayingAnimationTracks() do
+			if track ~= runTrack then
+				local id = track.Animation and track.Animation.AnimationId
+				if id == WALK_ID or (savedWalkId ~= nil and id == savedWalkId) then
+					track:Stop(0.05)
+				end
+			end
+		end
+		if not runTrack.IsPlaying then
+			runTrack:Play(0.1, 1, 1)
+		end
 		return
 	end
 	running = on
-	local hum = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-	local animator = hum and hum:FindFirstChildOfClass("Animator")
-	if not animator or not hum then
+	if not animator or not hum or not character then
 		running = false
 		return
 	end
 	if on then
-		local anim = Instance.new("Animation")
-		anim.AnimationId = RUN_ID
-		runTrack = animator:LoadAnimation(anim)
-		runTrack.Priority = Enum.AnimationPriority.Action
-		runTrack.Looped = true
-		runTrack:Play(0.05)
-	elseif runTrack then
-		runTrack:Stop(0.15)
-		runTrack = nil
+		if walkAnim and walkAnim.AnimationId ~= RUN_ID then
+			savedWalkId = walkAnim.AnimationId
+			walkAnim.AnimationId = RUN_ID
+		end
+		for _, track in animator:GetPlayingAnimationTracks() do
+			local id = track.Animation and track.Animation.AnimationId
+			if id == WALK_ID or id == savedWalkId then
+				track:Stop(0.05)
+			end
+		end
+		if not runTrack then
+			local anim = Instance.new("Animation")
+			anim.AnimationId = RUN_ID
+			runTrack = animator:LoadAnimation(anim)
+			runTrack.Priority = Enum.AnimationPriority.Action4
+			runTrack.Looped = true
+		end
+		if not runTrack.IsPlaying then
+			runTrack:Play(0.1, 1, 1)
+		end
+	else
+		if walkAnim and savedWalkId then
+			walkAnim.AnimationId = savedWalkId
+		end
+		savedWalkId = nil
+		if runTrack then
+			runTrack:Stop(0.15)
+			runTrack = nil
+		end
 	end
+end
+
+local function offerRobuxLevel()
+	if State.snapshot and TreadmillData.nextCost(State.snapshot.treadmillLevel) == nil then
+		Notifications.show("Your treadmill is already at max level.", "warn")
+	elseif State.snapshot and (State.snapshot.credits.TreadmillLevel or 0) > 0 then
+		State.remote("UseCredit"):FireServer("TreadmillLevel")
+	else
+		Purchases.offer("TreadmillLevel")
+	end
+end
+
+local signHooked = false
+
+local function hookSign()
+	if signHooked then
+		return
+	end
+	local belt = ownBelt()
+	local model = belt and belt.Parent
+	local board = model and model:FindFirstChild("SignBoard")
+	local gui = board and board:FindFirstChild("UpgradeSign")
+	local money = gui and gui:FindFirstChild("Money")
+	local robux = gui and gui:FindFirstChild("Robux")
+	if not (money and money:IsA("GuiButton") and robux and robux:IsA("GuiButton")) then
+		return
+	end
+	signHooked = true
+	money.Activated:Connect(promptMoney)
+	robux.Activated:Connect(offerRobuxLevel)
+end
+
+local function paintMoney()
+	local belt = ownBelt()
+	local model = belt and belt.Parent
+	local board = model and model:FindFirstChild("SignBoard")
+	local gui = board and board:FindFirstChild("UpgradeSign")
+	local money = gui and gui:FindFirstChild("Money")
+	if not (money and money:IsA("GuiObject")) then
+		return
+	end
+	local snap = State.snapshot
+	local cost = snap and TreadmillData.nextCost(snap.treadmillLevel)
+	local ready = cost ~= nil and snap ~= nil and snap.money >= cost
+	money.BackgroundColor3 = if ready then MONEY_READY else MONEY_IDLE
 end
 
 function Treadmill.start()
 	local gui = Ui.screen("TreadmillUpgrade", Players.LocalPlayer:WaitForChild("PlayerGui"), 6)
-	local upgradeBtn = Ui.button("Upgrade", "Upgrade treadmill", gui)
-	upgradeBtn.AnchorPoint = Vector2.new(0.5, 1)
-	upgradeBtn.Position = UDim2.new(0.5, 0, 1, -96)
-	upgradeBtn.Size = UDim2.fromOffset(220, 44)
-	upgradeBtn.Visible = false
-	upgradeBtn.Activated:Connect(promptMoney)
 	local speedBtn = Ui.button("SpeedRobux", "x1 SPEED", gui)
 	speedBtn.AnchorPoint = Vector2.new(0.5, 1)
 	speedBtn.Position = UDim2.new(0.5, 0, 1, -148)
@@ -173,6 +263,8 @@ function Treadmill.start()
 	end)
 
 	RunService.Heartbeat:Connect(function()
+		hookSign()
+		paintMoney()
 		local belt = ownBelt()
 		local root = Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 		local on = false
@@ -181,7 +273,6 @@ function Treadmill.start()
 			local half = belt.Size / 2
 			on = math.abs(rel.X) <= half.X and math.abs(rel.Z) <= half.Z and rel.Y >= half.Y - 1 and rel.Y <= half.Y + 6
 		end
-		upgradeBtn.Visible = on
 		local snap = State.snapshot
 		local tier = if snap then snap.speedRobuxTier or 0 else 0
 		local nowMult = Boosts.multiplier("Speed", tier)
@@ -193,6 +284,7 @@ function Treadmill.start()
 	Players.LocalPlayer.CharacterAdded:Connect(function()
 		running = false
 		runTrack = nil
+		savedWalkId = nil
 	end)
 
 	State.remote("SpeedGain").OnClientEvent:Connect(function(amount: number, beltPosition: Vector3, total: number?)
@@ -210,12 +302,8 @@ function Treadmill.start()
 		end
 		if prompt.Name == "TreadmillMoneyPrompt" then
 			promptMoney()
-		elseif State.snapshot and TreadmillData.nextCost(State.snapshot.treadmillLevel) == nil then
-			Notifications.show("Your treadmill is already at max level.", "warn")
-		elseif State.snapshot and (State.snapshot.credits.TreadmillLevel or 0) > 0 then
-			State.remote("UseCredit"):FireServer("TreadmillLevel")
 		else
-			Purchases.offer("TreadmillLevel")
+			offerRobuxLevel()
 		end
 	end)
 end
